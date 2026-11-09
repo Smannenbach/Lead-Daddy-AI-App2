@@ -144,3 +144,10 @@ key ever reaches the browser."
 - Key liveness re-probe (keys churn fast): ANTHROPIC, OPENAI, REOON all HTTP 200 LIVE.
 - Remaining BFCM-week items: one live scrape->verify->campaign run clicked by a human in the UI (code path already proven end-to-end), one live PSTN AI voice call if desired (signed-webhook simulation already proven), and A2P 10DLC brand registration before high SMS volume (Twilio Console, needs Steve's business details).
 - Track B (Smannenbach/leaddaddy) fold-back stays post-BFCM per plan; its working tree has Steve's uncommitted WIP — hands off until cleared.
+
+## Voice caller-ID pool wired (2026-11-09)
+- New `TWILIO_SENDER_POOL` env (Vercel all targets + .env.local): comma-separated E.164 numbers, round-robin for outbound AI voice calls. Pool: +1 928-370-3051 (app2, replies land here) + +1 762-438-3727 (Lead Daddy main-app number).
+- SMS stays pinned to TWILIO_PHONE_NUMBER (+1 928-370-3051) so lead replies always route back to this app's AI inbox.
+- Not pooled: +1 480-690-2666 (main app's Arive-connected number — callbacks would cross apps). GHL numbers +1 480-485-1229 / +1 813-522-4888 live in GHL's Twilio account, unusable from our account.
+- MIB Agency: no phone numbers discoverable (docx has only a PIT token; /locations 404s). If MIB numbers exist in GHL, they need a location-scoped token or manual listing.
+- Reconciled remote: Myke's PR #1 CRM workspace commits (f0cdbc1, aa2821f) rebased in, 70/70 tests + tsc green, merged to main, production deploy 0dc2995 READY; health 200.
