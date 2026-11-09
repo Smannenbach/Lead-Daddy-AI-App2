@@ -1,7 +1,8 @@
 // The single chokepoint for outbound SMS. Every send goes through guardedSendSms, which:
 //  1. blocks any number that ever opted out (a refusal belongs to the NUMBER, not one contact row),
 //  2. requires TCPA consent for marketing sends,
-//  3. caps marketing volume per day (A2P 10DLC is not registered yet; SMS_DAILY_CAP, default 100),
+//  3. caps marketing volume per day (A2P 10DLC is not registered yet; SMS_DAILY_CAP, default 100).
+//     The cap counts ALL outbound SMS (replies too): carriers filter on total volume, so this errs safe,
 //  4. fails closed: if opt-out state can't be read, nothing is sent.
 // The opt-out confirmation reply is the one send allowed to an opted-out number.
 
@@ -11,7 +12,8 @@ export type SmsPurpose = "marketing" | "reply" | "optout_confirmation";
 export type SmsResult = { sent: true } | { sent: false; reason: "opted_out" | "no_consent" | "daily_cap" | "guard_unavailable" };
 
 export interface SmsGuardStore {
-  contactsByPhone(variants: string[]): Promise<{ id: string; custom_fields: Record<string, unknown> | null }[]>;
+  /** Every contact whose stored phone is this number in ANY format (free-typed values included). */
+  contactsByPhone(phone: string): Promise<{ id: string; custom_fields: Record<string, unknown> | null }[]>;
   /** Number-level opt-out: the shared `sms_opt_outs` table (also used by the main app) or a legacy event. */
   hasOptOutEvent(canonical: string): Promise<boolean>;
   recordNumberOptOut(canonical: string, contactId: string | null): Promise<void>;
@@ -47,7 +49,17 @@ export function canonicalPhone(raw: string): string {
   return d ? `+${d}` : raw.trim();
 }
 
-/** Every format a contact row might have stored this number in. */
+/**
+ * Postgres regex (`~`) matching this number however it was typed: the 10 digits in order with any
+ * non-digits between them, optionally preceded by a 1 / +1 country code. Null if not a US number.
+ */
+export function phoneDigitsRegex(raw: string): string | null {
+  const ten = tenDigits(raw);
+  if (!ten) return null;
+  return `^[^0-9]*(1[^0-9]*)?${ten.split("").join("[^0-9]*")}[^0-9]*$`;
+}
+
+/** Every format a contact row might have stored this number in (fallback for non-US numbers). */
 export function phoneVariants(raw: string): string[] {
   const out = new Set<string>([raw.trim(), canonicalPhone(raw)]);
   const ten = tenDigits(raw);
@@ -64,7 +76,7 @@ export async function isNumberOptedOut(store: SmsGuardStore, to: string): Promis
 }
 
 async function isOptedOut(store: SmsGuardStore, to: string): Promise<boolean> {
-  const contacts = await store.contactsByPhone(phoneVariants(to));
+  const contacts = await store.contactsByPhone(to);
   if (contacts.some((c) => (c.custom_fields ?? {}).tcpa_consent === "revoked")) return true;
   return store.hasOptOutEvent(canonicalPhone(to));
 }
@@ -130,7 +142,7 @@ export async function guardedSendSms(
 
 /** Honour STOP for the number: every matching contact, plus a number-level record. */
 export async function recordOptOut(store: SmsGuardStore, from: string, nowIso: string): Promise<void> {
-  const contacts = await store.contactsByPhone(phoneVariants(from));
+  const contacts = await store.contactsByPhone(from);
   for (const c of contacts) {
     await store.updateContactFields(c.id, { ...(c.custom_fields ?? {}), tcpa_consent: "revoked", opted_out_at: nowIso });
   }
@@ -141,13 +153,15 @@ export async function recordOptOut(store: SmsGuardStore, from: string, nowIso: s
 /** Supabase-backed store over existing tables (crm_contact, lead_event) — no DDL. */
 export function supabaseSmsStore(db: SupabaseClient, org: string): SmsGuardStore {
   return {
-    async contactsByPhone(variants) {
-      const { data, error } = await db
+    async contactsByPhone(phone) {
+      const regex = phoneDigitsRegex(phone);
+      let q = db
         .from("crm_contact")
         .select("id, custom_fields")
         .eq("organization_id", org)
-        .in("phone", variants)
         .is("deleted_at", null);
+      q = regex ? q.filter("phone", "match", regex) : q.in("phone", phoneVariants(phone));
+      const { data, error } = await q;
       if (error) throw new Error(error.message);
       return (data ?? []) as { id: string; custom_fields: Record<string, unknown> | null }[];
     },

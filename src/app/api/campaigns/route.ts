@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendSms } from "@/lib/channels/twilio";
-import { guardedSendSms, phoneVariants, supabaseSmsStore } from "@/lib/channels/sms-guard";
+import { guardedSendSms, supabaseSmsStore } from "@/lib/channels/sms-guard";
 import { sendEmail } from "@/lib/channels/email";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
 import type { SequenceState, SequenceStep } from "@/lib/campaigns/sequences";
@@ -284,7 +284,7 @@ export async function PUT(request: Request) {
       // Direct sends are marketing: consent must be on file for a contact with this number.
       const db = createServiceClient();
       const store = supabaseSmsStore(db, organizationId());
-      const matches = await store.contactsByPhone(phoneVariants(body.to));
+      const matches = await store.contactsByPhone(body.to);
       const consentGranted = matches.some((c) => (c.custom_fields ?? {}).tcpa_consent === "granted");
       const res = await guardedSendSms(store, body.to, body.text ?? "", { purpose: "marketing", consentGranted }, sendSms);
       if (!res.sent) {

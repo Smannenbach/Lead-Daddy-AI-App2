@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   canonicalPhone,
   phoneVariants,
+  phoneDigitsRegex,
   smsDailyCap,
   guardedSendSms,
   recordOptOut,
@@ -17,9 +18,11 @@ function memoryStore(contacts: Contact[], opts: { failReads?: boolean; failReser
   let released = 0;
   const sharedOptOuts = new Set<string>(opts.sharedOptOuts ?? []);
   const store: SmsGuardStore = {
-    async contactsByPhone(variants) {
+    async contactsByPhone(phone) {
       if (opts.failReads) throw new Error("db down");
-      return contacts.filter((c) => variants.includes(c.phone));
+      // Mirror the production regex so tests exercise the same matching rule.
+      const re = phoneDigitsRegex(phone);
+      return contacts.filter((c) => (re ? new RegExp(re).test(c.phone) : c.phone === phone));
     },
     async hasOptOutEvent(canonical) {
       if (opts.failReads) throw new Error("db down");
@@ -219,5 +222,29 @@ describe("daily cap reservation", () => {
       guardedSendSms(store, "+14805550100", "hi", { purpose: "marketing", consentGranted: true }, failing),
     ).rejects.toThrow("twilio 500");
     expect(counts()).toMatchObject({ outbound: 0, released: 1 });
+  });
+});
+
+describe("phoneDigitsRegex", () => {
+  it("matches the number however it was typed", () => {
+    const re = new RegExp(phoneDigitsRegex("+14805550100")!);
+    for (const f of ["+14805550100", "480 555 0100", "1 (480) 555-0100", "480.555.0100", "+1-480-555-0100", "4805550100"]) {
+      expect(re.test(f), f).toBe(true);
+    }
+  });
+  it("does not match a different number or a longer string containing it", () => {
+    const re = new RegExp(phoneDigitsRegex("4805550100")!);
+    expect(re.test("4805550101")).toBe(false);
+    expect(re.test("94805550100")).toBe(false);
+    expect(re.test("48055501001")).toBe(false);
+  });
+  it("treats a space-separated revoked duplicate as the same number", async () => {
+    const { store } = memoryStore([
+      { id: "a", phone: "+14805550100", custom_fields: { tcpa_consent: "granted" } },
+      { id: "b", phone: "480 555 0100", custom_fields: { tcpa_consent: "revoked" } },
+    ]);
+    const r = recorder();
+    const res = await guardedSendSms(store, "+14805550100", "hi", { purpose: "marketing", consentGranted: true }, r.send);
+    expect(res).toEqual({ sent: false, reason: "opted_out" });
   });
 });

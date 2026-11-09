@@ -6,7 +6,7 @@ import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseWebhook, sendSms } from "@/lib/channels/twilio";
 import { isOptOut } from "@/lib/channels/optout";
-import { guardedSendSms, phoneVariants, recordOptOut, supabaseSmsStore } from "@/lib/channels/sms-guard";
+import { guardedSendSms, recordOptOut, supabaseSmsStore } from "@/lib/channels/sms-guard";
 import { validateTwilioSignature } from "@/lib/twilio-signature";
 import { callModelWithFallback, enabledProviders } from "@/lib/ai/providers";
 import { autoSelect } from "@/lib/ai/router";
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   const store = supabaseSmsStore(db, org);
   // A number can map to several contact rows (duplicates, different formats). Never use
   // maybeSingle() here: it errors on duplicates and the STOP would be silently dropped.
-  const matches = await store.contactsByPhone(phoneVariants(from)).catch(() => []);
+  const matches = await store.contactsByPhone(from).catch(() => []);
   const contact = matches[0] ?? null;
 
   const now = new Date().toISOString();
