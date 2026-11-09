@@ -124,14 +124,14 @@ async function generateCampaignSteps(
   channels: ("email" | "sms" | "call")[],
 ): Promise<{ steps: SequenceStep[] } | { error: string }> {
   const { autoSelect } = await import("@/lib/ai/router");
-  const { callModel } = await import("@/lib/ai/providers");
+  const { callModelWithFallback, enabledProviders } = await import("@/lib/ai/providers");
   const { assertAiBudget, logAiRun } = await import("@/lib/ai/log");
   const { buildSteps } = await import("@/lib/campaigns/sequences");
 
   try {
     await assertAiBudget();
     const decision = autoSelect("campaign outreach copy sequence", "campaign-writer");
-    const result = await callModel(decision.provider, [
+    const result = await callModelWithFallback(decision.provider, [
       { role: "system", content: decision.agent!.systemPrompt },
       {
         role: "user",
@@ -146,7 +146,7 @@ async function generateCampaignSteps(
           "JSON only, no prose.",
         ].filter(Boolean).join("\n"),
       },
-    ]);
+    ], enabledProviders());
     await logAiRun({
       task: "campaign_copy",
       provider: decision.provider,

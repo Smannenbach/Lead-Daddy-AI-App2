@@ -7,7 +7,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { parseWebhook, sendSms } from "@/lib/channels/twilio";
 import { isOptOut } from "@/lib/channels/optout";
 import { validateTwilioSignature } from "@/lib/twilio-signature";
-import { callModel } from "@/lib/ai/providers";
+import { callModelWithFallback, enabledProviders } from "@/lib/ai/providers";
 import { autoSelect } from "@/lib/ai/router";
 import { logAiRun } from "@/lib/ai/log";
 
@@ -67,10 +67,10 @@ export async function POST(request: Request) {
   let reply = "Thanks — a specialist will follow up with you shortly.";
   try {
     const decision = autoSelect(bodyText, "sales-caller");
-    const result = await callModel(decision.provider, [
+    const result = await callModelWithFallback(decision.provider, [
       { role: "system", content: decision.agent!.systemPrompt + "\nYou are replying by SMS: keep it under 300 characters, no markdown." },
       { role: "user", content: bodyText },
-    ]);
+    ], enabledProviders());
     if (result.text.trim()) reply = result.text.slice(0, 450);
     await logAiRun({
       leadId: contact.id,

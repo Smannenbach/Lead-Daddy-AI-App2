@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { callModel, type ChatMessage } from "@/lib/ai/providers";
+import { callModelWithFallback, enabledProviders, type ChatMessage } from "@/lib/ai/providers";
 import { autoSelect } from "@/lib/ai/router";
 import { logAiRun, assertAiBudget } from "@/lib/ai/log";
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
   let result;
   try {
-    result = await callModel(decision.provider, messages);
+    result = await callModelWithFallback(decision.provider, messages, enabledProviders());
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : "model call failed" }, { status: 502 });
   }

@@ -3,7 +3,7 @@
 
 import { parseWebhook } from "@/lib/channels/twilio";
 import { validateTwilioSignature } from "@/lib/twilio-signature";
-import { callModel } from "@/lib/ai/providers";
+import { callModelWithFallback, enabledProviders } from "@/lib/ai/providers";
 import { autoSelect } from "@/lib/ai/router";
 import { logAiRun } from "@/lib/ai/log";
 
@@ -32,10 +32,10 @@ export async function POST(request: Request) {
   } else {
     try {
       const decision = autoSelect(speech, "sales-caller");
-      const result = await callModel(decision.provider, [
+      const result = await callModelWithFallback(decision.provider, [
         { role: "system", content: decision.agent!.systemPrompt + "\nContext: outbound cold call. Keep each turn under 2 sentences." },
         { role: "user", content: speech },
-      ]);
+      ], enabledProviders());
       reply = result.text;
       await logAiRun({
         task: "voice_turn",

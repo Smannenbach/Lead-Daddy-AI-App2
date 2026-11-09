@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { scrapeUrl, LEAD_EXTRACT_PROMPT } from "@/lib/scrape/firecrawl";
 import { extractPeopleFromDigest, personToContactInsert } from "@/lib/scrape/digest";
-import { callModel } from "@/lib/ai/providers";
+import { callModelWithFallback, enabledProviders } from "@/lib/ai/providers";
 import { autoSelect } from "@/lib/ai/router";
 import { logAiRun, assertAiBudget } from "@/lib/ai/log";
 import { organizationId } from "@/lib/supabase/org";
@@ -41,13 +41,13 @@ export async function POST(request: Request) {
   try {
     await assertAiBudget();
     const decision = autoSelect("scrape digest of extracted page data", "scraper-analyst");
-    const result = await callModel(decision.provider, [
+    const result = await callModelWithFallback(decision.provider, [
       { role: "system", content: decision.agent!.systemPrompt },
       {
         role: "user",
         content: `Source URL: ${body.url}\n\nExtracted data:\n${JSON.stringify(scraped.extracted)}\n\nPage content (first 6000 chars):\n${scraped.markdown.slice(0, 6000)}`,
       },
-    ]);
+    ], enabledProviders());
     await logAiRun({
       task: "scrape_digest",
       provider: decision.provider,

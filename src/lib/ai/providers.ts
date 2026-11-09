@@ -110,3 +110,31 @@ export async function callModel(spec: ProviderSpec, messages: ChatMessage[]): Pr
   if (spec.key === "anthropic") return callAnthropic(spec, messages);
   return callOpenAICompatible(spec, messages);
 }
+
+/**
+ * Call with auth-failure resilience: if the selected provider rejects the key
+ * (401/403 — keys churn), retry with the next enabled provider. Non-auth errors
+ * (rate limits, bad request) still throw for the caller to handle.
+ */
+export async function callModelWithFallback(
+  preferred: ProviderSpec,
+  messages: ChatMessage[],
+  enabled: ProviderSpec[],
+): Promise<CallResult> {
+  const order = [preferred, ...enabled.filter((p) => p.key !== preferred.key)];
+  let lastAuthError: Error | null = null;
+  for (const spec of order) {
+    if (!process.env[spec.envKey]) continue;
+    try {
+      return await callModel(spec, messages);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/401|403|authentication|incorrect api key|invalid x-api-key/i.test(msg)) {
+        lastAuthError = err instanceof Error ? err : new Error(msg);
+        continue; // key dead — try next provider
+      }
+      throw err;
+    }
+  }
+  throw lastAuthError ?? new Error("No AI provider available");
+}
