@@ -119,3 +119,7 @@ key ever reaches the browser."
 - Production smoke: /api/health 200 (db up, anthropic+openai+qwen), / -> 307 login, /bfcm 200. All smoke rows cleaned.
 - Repo: gitleaks clean, committed + pushed to Smannenbach/LeadDaddy.ai main (3670cf9..1d19865).
 - Remaining BFCM-gate items (need human sessions): Steve+Myke magic-link sign-in; one live scrape->verify->campaign run; one live AI voice call test. A2P 10DLC registration still recommended before high SMS volume (console step, needs business details).
+
+## Production pipeline proof + hotfixes (2026-11-09)
+- FULL LOOP PROVEN LIVE: Reoon verify (real API, "safe"->valid) -> contact+verification rows -> live campaign -> advance via cron credential -> SendGrid email sent ({"advanced":true,"sent":1}) -> cleanup. One PIPELINE TEST email delivered to steve@loandaddy.ai.
+- Hotfixes found BY the proof: (1) Reoon "safe" status unmapped -> launch gate would reject good emails; (2) proxy matcher 307'd cron calls (edge runtime can't read non-NEXT_PUBLIC env; campaigns routes self-protect so removed from matcher); (3) CLI-pushed CRON_SECRET was corrupted/empty and shadowed the fallback — deleted; cron/advance now auth via SUPABASE_SERVICE_ROLE_KEY (server-to-server), documented in OPS.md.

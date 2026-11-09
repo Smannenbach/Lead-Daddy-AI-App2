@@ -15,8 +15,9 @@ interface TargetAudience {
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  // Authorized via signed-in allowlisted user OR server-to-server cron secret.
-  const cronSecret = process.env.CRON_SECRET;
+  // Authorized via signed-in allowlisted user OR server-to-server secret
+  // (dedicated CRON_SECRET, falling back to the service role).
+  const cronSecret = process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const isCron = Boolean(cronSecret) && request.headers.get("x-cron-secret") === cronSecret;
   if (!isCron) {
     const auth = await requireUser();

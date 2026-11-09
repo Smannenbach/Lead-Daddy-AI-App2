@@ -6,7 +6,9 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { organizationId } from "@/lib/supabase/org";
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
+  // Server-to-server credential: dedicated CRON_SECRET, falling back to the
+  // service role (always present in this deployment).
+  const secret = process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const auth = request.headers.get("authorization");
   if (!secret || auth !== `Bearer ${secret}`) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });

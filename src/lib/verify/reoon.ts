@@ -15,7 +15,7 @@ export async function verifyEmail(email: string): Promise<EmailVerdict> {
   const j = (await res.json()) as Record<string, unknown>;
   const status = String(j.status ?? "").toLowerCase();
   let result: EmailVerdict["result"] = "unknown";
-  if (status === "valid") result = "valid";
+  if (status === "valid" || status === "safe") result = "valid"; // Reoon "safe" = deliverable
   else if (["invalid", "disabled", "rejected", "unsafe"].includes(status)) result = "invalid";
   else if (["unknown", "risky", "catch_all", "role"].includes(status)) result = "risky";
   return { result, raw: j };

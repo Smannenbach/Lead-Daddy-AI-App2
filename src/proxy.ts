@@ -24,7 +24,15 @@ export async function proxy(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  const isProtected = request.nextUrl.pathname === "/" || request.nextUrl.pathname.startsWith("/api/leads") || request.nextUrl.pathname.startsWith("/api/campaigns") || request.nextUrl.pathname.startsWith("/api/scrape") || request.nextUrl.pathname.startsWith("/api/social") || request.nextUrl.pathname === "/api/ai";
+  const isProtected =
+    request.nextUrl.pathname === "/" ||
+    request.nextUrl.pathname.startsWith("/api/leads") ||
+    request.nextUrl.pathname.startsWith("/api/scrape") ||
+    request.nextUrl.pathname.startsWith("/api/social") ||
+    request.nextUrl.pathname === "/api/ai";
+  // NOTE: /api/campaigns is deliberately NOT proxied — its routes self-protect
+  // (requireUser for users, x-cron-secret for the runner) and the edge runtime
+  // cannot read non-NEXT_PUBLIC env vars, so a proxy-level cron bypass can't work.
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -39,5 +47,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/api/leads/:path*", "/api/campaigns/:path*", "/api/scrape", "/api/social/:path*", "/api/ai"],
+  matcher: ["/", "/login", "/api/leads/:path*", "/api/scrape", "/api/social/:path*", "/api/ai"],
 };
