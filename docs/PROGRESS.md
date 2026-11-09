@@ -138,3 +138,9 @@ key ever reaches the browser."
 ## Password auth (2026-11-09)
 - Email+password logins enabled for steve@loandaddy.ai + mykoal@loandaddy.ai (passwords set via admin API on the shared project; sign-in verified via password grant — sessions issued). Login page now has Password / Magic-link toggle. Magic links remain as fallback.
 - Note: the shared Supabase project also backs the main leaddaddy.ai Base44 app — if it uses Supabase email auth, the same credentials work there (test on leaddaddy.ai login).
+
+## BFCM gate — sign-in blocker CLEARED (2026-11-09)
+- Both teammates confirmed signed in to app2.leaddaddy.ai: mykoal@loandaddy.ai (08:53 UTC) and steve@loandaddy.ai (09:05 UTC), verified via admin API on zdnlouluogpdfhygdnjn. That was the last critical-path blocker on the BFCM checklist.
+- Key liveness re-probe (keys churn fast): ANTHROPIC, OPENAI, REOON all HTTP 200 LIVE.
+- Remaining BFCM-week items: one live scrape->verify->campaign run clicked by a human in the UI (code path already proven end-to-end), one live PSTN AI voice call if desired (signed-webhook simulation already proven), and A2P 10DLC brand registration before high SMS volume (Twilio Console, needs Steve's business details).
+- Track B (Smannenbach/leaddaddy) fold-back stays post-BFCM per plan; its working tree has Steve's uncommitted WIP — hands off until cleared.
