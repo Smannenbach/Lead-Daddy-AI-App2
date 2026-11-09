@@ -18,6 +18,9 @@ export interface SmsGuardStore {
   countOutboundSince(iso: string): Promise<number>;
   updateContactFields(id: string, fields: Record<string, unknown>): Promise<void>;
   logEvent(type: string, detail: string, data: Record<string, unknown>): Promise<void>;
+  /** Insert the sms_outbound row BEFORE sending; returns its id. Throws if it can't be written. */
+  reserveOutbound(detail: string, data: Record<string, unknown>): Promise<string>;
+  releaseOutbound(id: string): Promise<void>;
 }
 
 const DEFAULT_CAP = 100;
@@ -78,24 +81,50 @@ export async function guardedSendSms(
   send: (to: string, body: string) => Promise<unknown>,
   now: Date = new Date(),
 ): Promise<SmsResult> {
+  const data = { to: canonicalPhone(to), purpose: opts.purpose };
+
   if (opts.purpose !== "optout_confirmation") {
     try {
       if (await isOptedOut(store, to)) return { sent: false, reason: "opted_out" };
-      if (opts.purpose === "marketing") {
-        if (opts.consentGranted !== true) return { sent: false, reason: "no_consent" };
-        if ((await store.countOutboundSince(startOfUtcDay(now))) >= smsDailyCap()) {
-          return { sent: false, reason: "daily_cap" };
-        }
-      }
     } catch {
       return { sent: false, reason: "guard_unavailable" };
     }
   }
 
+  if (opts.purpose === "marketing") {
+    if (opts.consentGranted !== true) return { sent: false, reason: "no_consent" };
+    // Claim capacity first: the reservation row is what the cap counts. Counting AFTER our own
+    // insert means concurrent senders at the edge all see the overshoot and back off, rather than
+    // all reading the same below-cap number. If the row can't be written, nothing is sent.
+    let reservation: string;
+    try {
+      reservation = await store.reserveOutbound(body.slice(0, 300), data);
+    } catch {
+      return { sent: false, reason: "guard_unavailable" };
+    }
+    let overCap: boolean;
+    try {
+      overCap = (await store.countOutboundSince(startOfUtcDay(now))) > smsDailyCap();
+    } catch {
+      await store.releaseOutbound(reservation).catch(() => undefined);
+      return { sent: false, reason: "guard_unavailable" };
+    }
+    if (overCap) {
+      await store.releaseOutbound(reservation).catch(() => undefined);
+      return { sent: false, reason: "daily_cap" };
+    }
+    try {
+      await send(to, body);
+    } catch (err) {
+      await store.releaseOutbound(reservation).catch(() => undefined);
+      throw err;
+    }
+    return { sent: true };
+  }
+
+  // Replies and the opt-out confirmation are not capped; log them after the fact.
   await send(to, body);
-  await store
-    .logEvent("sms_outbound", body.slice(0, 300), { to: canonicalPhone(to), purpose: opts.purpose })
-    .catch(() => undefined);
+  await store.logEvent("sms_outbound", body.slice(0, 300), data).catch(() => undefined);
   return { sent: true };
 }
 
@@ -169,6 +198,19 @@ export function supabaseSmsStore(db: SupabaseClient, org: string): SmsGuardStore
         .update({ custom_fields: fields, updated_date: new Date().toISOString() })
         .eq("id", id)
         .eq("organization_id", org);
+      if (error) throw new Error(error.message);
+    },
+    async reserveOutbound(detail, data) {
+      const { data: row, error } = await db
+        .from("lead_event")
+        .insert({ unified_lead_id: null, event_type: "sms_outbound", detail, data, organization_id: org })
+        .select("id")
+        .single();
+      if (error || !row) throw new Error(error?.message ?? "reservation insert returned no row");
+      return (row as { id: string }).id;
+    },
+    async releaseOutbound(id) {
+      const { error } = await db.from("lead_event").delete().eq("id", id).eq("organization_id", org);
       if (error) throw new Error(error.message);
     },
     async logEvent(type, detail, data) {

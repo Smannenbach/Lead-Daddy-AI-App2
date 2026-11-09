@@ -10,9 +10,11 @@ import {
 
 type Contact = { id: string; phone: string; custom_fields: Record<string, unknown> };
 
-function memoryStore(contacts: Contact[], opts: { failReads?: boolean; sentToday?: number; sharedOptOuts?: string[] } = {}) {
+function memoryStore(contacts: Contact[], opts: { failReads?: boolean; failReserve?: boolean; sentToday?: number; sharedOptOuts?: string[] } = {}) {
   const events: { type: string; data: Record<string, unknown> }[] = [];
   let outbound = opts.sentToday ?? 0;
+  let reservations = 0;
+  let released = 0;
   const sharedOptOuts = new Set<string>(opts.sharedOptOuts ?? []);
   const store: SmsGuardStore = {
     async contactsByPhone(variants) {
@@ -38,8 +40,18 @@ function memoryStore(contacts: Contact[], opts: { failReads?: boolean; sentToday
       events.push({ type, data });
       if (type === "sms_outbound") outbound += 1;
     },
+    async reserveOutbound() {
+      if (opts.failReserve) throw new Error("insert failed");
+      outbound += 1;
+      reservations += 1;
+      return `r${reservations}`;
+    },
+    async releaseOutbound() {
+      outbound -= 1;
+      released += 1;
+    },
   };
-  return { store, events, contacts, sharedOptOuts };
+  return { store, events, contacts, sharedOptOuts, counts: () => ({ outbound, reservations, released }) };
 }
 
 function recorder() {
@@ -80,12 +92,13 @@ describe("guardedSendSms", () => {
   beforeEach(() => { delete process.env.SMS_DAILY_CAP; });
 
   it("sends marketing SMS when consent is granted and logs it", async () => {
-    const { store, events } = memoryStore([{ id: "a", phone: "+14805550100", custom_fields: { tcpa_consent: "granted" } }]);
+    const { store, events, counts } = memoryStore([{ id: "a", phone: "+14805550100", custom_fields: { tcpa_consent: "granted" } }]);
     const r = recorder();
     const res = await guardedSendSms(store, "+14805550100", "hi", { purpose: "marketing", consentGranted: true }, r.send);
     expect(res).toEqual({ sent: true });
     expect(r.sent).toHaveLength(1);
-    expect(events.filter((e) => e.type === "sms_outbound")).toHaveLength(1);
+    expect(events).toHaveLength(0); // marketing sends are counted by their reservation row
+    expect(counts()).toMatchObject({ outbound: 1, reservations: 1, released: 0 });
   });
 
   it("refuses marketing SMS without consent", async () => {
@@ -173,5 +186,38 @@ describe("shared opt-out table", () => {
     const { store, sharedOptOuts } = memoryStore([]);
     await recordOptOut(store, "(480) 555-0100", "2026-11-09T00:00:00Z");
     expect(sharedOptOuts.has("+14805550100")).toBe(true);
+  });
+});
+
+describe("daily cap reservation", () => {
+  beforeEach(() => { delete process.env.SMS_DAILY_CAP; });
+
+  it("does not send when the reservation row cannot be written (so no send goes uncounted)", async () => {
+    const { store } = memoryStore([], { failReserve: true });
+    const r = recorder();
+    const res = await guardedSendSms(store, "+14805550100", "hi", { purpose: "marketing", consentGranted: true }, r.send);
+    expect(res).toEqual({ sent: false, reason: "guard_unavailable" });
+    expect(r.sent).toHaveLength(0);
+  });
+
+  it("never lets concurrent sends at the edge exceed the cap", async () => {
+    process.env.SMS_DAILY_CAP = "5";
+    const { store, counts } = memoryStore([], { sentToday: 4 });
+    const r = recorder();
+    const results = await Promise.all(
+      [1, 2, 3].map(() => guardedSendSms(store, "+14805550100", "hi", { purpose: "marketing", consentGranted: true }, r.send)),
+    );
+    expect(r.sent.length).toBeLessThanOrEqual(1);
+    expect(results.filter((x) => x.sent).length).toBe(r.sent.length);
+    expect(counts().outbound).toBeLessThanOrEqual(5);
+  });
+
+  it("releases the reservation when Twilio fails", async () => {
+    const { store, counts } = memoryStore([]);
+    const failing = async () => { throw new Error("twilio 500"); };
+    await expect(
+      guardedSendSms(store, "+14805550100", "hi", { purpose: "marketing", consentGranted: true }, failing),
+    ).rejects.toThrow("twilio 500");
+    expect(counts()).toMatchObject({ outbound: 0, released: 1 });
   });
 });

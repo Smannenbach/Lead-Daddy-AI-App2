@@ -49,7 +49,8 @@ export async function POST(request: Request) {
     try {
       await recordOptOut(store, from, now);
     } catch (err) {
-      // Never swallow a refusal silently: surface it so Twilio retries and logs show it.
+      // Never swallow a refusal silently. Twilio only redelivers on 5xx if the number's webhook URL
+      // carries a retry override (#rc=5&rp=all) - see docs/OPS.md. The 500 also shows in logs.
       console.error("opt-out persist failed", err);
       return new Response("opt-out persist failed", { status: 500 });
     }

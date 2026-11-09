@@ -31,6 +31,18 @@ Vercel (`steve-projects` team) with env vars from `docs/SETUP.md`.
 - **Duplicate leads:** dedupe is by normalized email (csv/import/capture). Manual cleanup:
   `delete from crm_contact where email = '...'` then re-add.
 
+## SMS safety (A2P not yet approved)
+
+- Every outbound SMS goes through `src/lib/channels/sms-guard.ts`: opted-out numbers are refused (any
+  contact row, the shared `sms_opt_outs` table, or a legacy `sms_optout` event), marketing needs
+  `tcpa_consent = granted`, and marketing volume is capped per UTC day by `SMS_DAILY_CAP` (default 100).
+  A marketing send inserts its `lead_event` `sms_outbound` row BEFORE calling Twilio; if that row can't
+  be written, nothing is sent.
+- Twilio does NOT retry webhooks on HTTP 5xx by default. The STOP handler returns 500 if it can't
+  persist an opt-out, so the number's SMS webhook URL should end with `#rc=5&rp=all`
+  (Twilio connection override: up to 5 retries on any failure), e.g.
+  `https://app2.leaddaddy.ai/api/channels/sms#rc=5&rp=all`. Steve sets this in Twilio Console.
+
 ## Rollback
 
 - Vercel → Deployments → Promote the previous production deployment. Env changes roll back
