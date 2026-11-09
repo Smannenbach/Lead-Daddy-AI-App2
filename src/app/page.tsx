@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -355,6 +356,7 @@ export default function Console() {
           </p>
         </div>
         <div className="flex items-center gap-4 text-sm text-neutral-400">
+          <Link href="/crm" className="rounded-lg bg-neutral-100 px-3 py-1.5 font-medium text-neutral-900 hover:bg-white">Open CRM workspace</Link>
           <span>{email}</span>
           <button onClick={signOut} className="hover:text-white">Sign out</button>
         </div>

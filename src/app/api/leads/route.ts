@@ -74,6 +74,7 @@ export async function POST(request: Request) {
       custom_fields: body.tcpaConsent ? { tcpa_consent: "granted" } : {},
       lead_source: "manual",
       stage: "new",
+      engagement_history: [{ type: "created", at: now, by: auth.user.email ?? null, detail: "Lead added manually" }],
       created_date: now,
       updated_date: now,
     })
