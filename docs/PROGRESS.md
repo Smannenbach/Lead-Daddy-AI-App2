@@ -110,3 +110,12 @@ key ever reaches the browser."
 ## Consent visibility + endpoint lockdown (2026-11-09)
 - GET /api/leads now returns consent (custom_fields.tcpa_consent: none|granted|revoked); console leads table has a Consent badge (green/red/dim). Live-surface who can legally be texted during BFCM.
 - GET /api/ai now requires an allowlisted session (was public). Verified: unauthenticated -> 307 to /login; /api/health + /api/capture remain public by design (200s). 49/49 tests, tsc/eslint/build green.
+
+## PRODUCTION LAUNCH (2026-11-09) — APPROVED AND EXECUTED
+- Twilio: NEW number +1 928-370-3051 (AZ, SMS+voice, sid PNec27c07a8ba980a41eb0a3c224bbf02d) — old +14806902666 untouched (still serves main app/Arive).
+- Vercel: project leaddaddy-ai (prj_82jyDqnNcm1Y1TngXFougzrvugo7), 22 env vars (targets patched production+preview+development via REST API — CLI had resolved the wrong project), preview green, `vercel --prod` deployed + aliased leaddaddy-ai.vercel.app.
+- DNS: Cloudflare CNAME app2.leaddaddy.ai -> cname.vercel-dns.com (record 4cb4fdc53f8a17194e1af430619e3fa0, zone leaddaddy.ai). Domain attached in Vercel. SSL live.
+- Twilio webhooks on new number: voice+sms -> https://app2.leaddaddy.ai/api/channels/{voice,sms} (POST).
+- Production smoke: /api/health 200 (db up, anthropic+openai+qwen), / -> 307 login, /bfcm 200. All smoke rows cleaned.
+- Repo: gitleaks clean, committed + pushed to Smannenbach/LeadDaddy.ai main (3670cf9..1d19865).
+- Remaining BFCM-gate items (need human sessions): Steve+Myke magic-link sign-in; one live scrape->verify->campaign run; one live AI voice call test. A2P 10DLC registration still recommended before high SMS volume (console step, needs business details).
