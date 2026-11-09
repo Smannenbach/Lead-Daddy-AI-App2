@@ -127,3 +127,10 @@ key ever reaches the browser."
 ## Voice agent PROVEN LIVE (2026-11-09)
 - Signed webhook simulation against production: POST /api/channels/voice with valid X-Twilio-Signature -> signature validated -> auto-select picked Claude -> sales-caller persona produced a compliant DSCR answer ("business-purpose... qualified on rental income...") -> TwiML returned. Full AI voice loop verified without needing a PSTN call.
 - Key rotation incident: the docx "Anthropic API Key" died (401) mid-launch; rotated to "Claude - Autonomous-Agents" key in .env.local + Vercel (delete+recreate — PATCH cannot change values). LESSON: these keys churn fast; probe before launch days; health endpoint reports presence not liveness.
+
+## Key-churn resilience (2026-11-09)
+- Pre-BFCM key sweep: ANTHROPIC/REOON/FIRECRAWL/TWILIO/SENDGRID live; OPENAI dead -> rotated to live docx key; QWEN/REALVALIDITO/COMPOSIO all dead with NO live replacements in the doc (240 candidates probed).
+- Built: (1) callModelWithFallback — 401/403 from any provider auto-fails-over to the next enabled one (4 unit tests); wired into /api/ai, scrape digest, campaign copy, SMS reply, voice. (2) Phone verification falls back to Twilio Lookup v2 (carrier+line type, ~$0.005) when the RealValidito key is dead.
+- Composio/social: DEGRADED (no live raw key; the Composio MCP session auth is separate). Not BFCM-critical; regenerate at dashboard.composio.dev.
+- LESSON (all agents): the secrets-doc keys churn fast — always probe before launch days; Vercel PATs can't decrypt env values (decrypt=true returns masked/empty); Vercel env values can't be PATCHed in place (DELETE+POST).
+- Sign-ins: mykoal@loandaddy.ai SIGNED IN 07:24 UTC. steve@loandaddy.ai pending click.
