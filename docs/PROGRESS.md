@@ -151,3 +151,11 @@ key ever reaches the browser."
 - Not pooled: +1 480-690-2666 (main app's Arive-connected number — callbacks would cross apps). GHL numbers +1 480-485-1229 / +1 813-522-4888 live in GHL's Twilio account, unusable from our account.
 - MIB Agency: no phone numbers discoverable (docx has only a PIT token; /locations 404s). If MIB numbers exist in GHL, they need a location-scoped token or manual listing.
 - Reconciled remote: Myke's PR #1 CRM workspace commits (f0cdbc1, aa2821f) rebased in, 70/70 tests + tsc green, merged to main, production deploy 0dc2995 READY; health 200.
+
+## Cron-401 blocker fixed + Qwen revived via OpenRouter (2026-11-09, deploy c1b23ba)
+- ROOT CAUSE: deleting the corrupted CRON_SECRET from Vercel also removed the auth Vercel Cron auto-sends (`Bearer $CRON_SECRET`) — scheduled invocations had no credential and would 401. Fix: fresh random CRON_SECRET set on Vercel (all targets) + .env.local. Verified on prod: 200 with secret, 401 without.
+- QWEN_API_KEY (sk-or-…7562) is an OPENROUTER key, not DashScope — swarm probe against dashscope was a false negative. Key is LIVE (usage data on openrouter /key). Repointed qwen provider: baseUrl https://openrouter.ai/api/v1, model qwen/qwen3.8-27b. Chat completion 200 verified. QWEN_BASE_URL env fixed (was duplicated URL).
+- RealValidito: service replatformed — api.realvalidito.com now serves a login SPA, old REST paths 404. Twilio Lookup v2 fallback is the permanent phone-verify path.
+- Composio: session/OAuth auth WORKS — Slack connection ACTIVE (LoanDaddy.ai team T0B9HG11ULU). Other toolkits need per-toolkit connect via COMPOSIO_MANAGE_CONNECTIONS.
+- Runbooks delivered: docs/runbooks/a2p-10dlc.md (10DLC console registration), docs/runbooks/bfcm-human-validation.md (human E2E gates).
+- Track B WIP (Nov 8 session): parses clean, compliance-positive (A2A/WebMCP agent cards, AEO schema, B2B footer, 234-domain compliance registry). Recommend checkpoint commit — AWAITING Steve confirmation of authorship. Not touching.
