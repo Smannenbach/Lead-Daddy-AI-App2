@@ -1,0 +1,264 @@
+<title>Lead Daddy Directions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Public+Sans:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Figtree:wght@400;500;600&family=Schibsted+Grotesk:wght@400..800&family=Geist:wght@400;500;600&display=swap">
+<style>
+/* Gallery chrome: quiet neutral page; each direction panel carries its own token set. */
+:root {
+  --page: #f3f4f6; --page-fg: #1c2230; --page-muted: #5d6676; --page-line: #d9dde4; --page-card: #ffffff;
+  --gate: #8a5a00; --gate-bg: #fff3d6;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #11151c; --page-fg: #e6e9ef; --page-muted: #9aa3b2; --page-line: #2a3240; --page-card: #181e27;
+  --gate: #ffcf6e; --gate-bg: #3a2c0c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --page: #11151c; --page-fg: #e6e9ef; --page-muted: #9aa3b2; --page-line: #2a3240; --page-card: #181e27;
+  --gate: #ffcf6e; --gate-bg: #3a2c0c; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--page); color: var(--page-fg); font: 15px/1.55 "Public Sans", system-ui, sans-serif;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 64px }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 40px }
+header.intro { display: grid; gap: 10px; max-width: 70ch }
+header.intro h1 { font: 700 clamp(26px, 4vw, 38px)/1.15 "Archivo", sans-serif; margin: 0; text-wrap: balance }
+header.intro p { margin: 0; color: var(--page-muted) }
+.gate { background: var(--gate-bg); color: var(--gate); border-radius: 6px; padding: 10px 14px; font-weight: 600 }
+nav.jump { display: flex; flex-wrap: wrap; gap: 8px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--page); padding-block: 10px }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--page) }
+nav.jump a { color: var(--page-fg); text-decoration: none; border: 1px solid var(--page-line); border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 14px }
+nav.jump a:hover, nav.jump a:focus-visible { border-color: var(--page-fg); outline: none }
+
+/* ---------- Direction tokens ---------- */
+.dir { --accent: var(--brand); }
+.dir-a { --bg:#f5f6f8; --surface:#ffffff; --fg:#121a2e; --muted:#58627a; --line:#dde1e8; --brand:#d98a00; --brand-fg:#1a1200; --ink:#16213e; --ink-fg:#f2f4f8;
+  --good:#1d7a4f; --warn:#b45f00; --bad:#b4232a; --radius:4px; --row:34px; --display:"Archivo", sans-serif; --body:"Public Sans", sans-serif; --dwdth: 82; }
+.dir-b { --bg:#ffffff; --surface:#f4f6ff; --fg:#141833; --muted:#5a6187; --line:#e3e6f5; --brand:#2a46d6; --brand-fg:#ffffff; --ink:#2a46d6; --ink-fg:#ffffff;
+  --good:#16834c; --warn:#b5590d; --bad:#c2333d; --radius:14px; --row:50px; --display:"Bricolage Grotesque", sans-serif; --body:"Figtree", sans-serif; --dwdth: 100; --pop:#ff6b57; }
+.dir-c { --bg:#f6f6f3; --surface:#ffffff; --fg:#1d211f; --muted:#626a66; --line:#e2e3de; --brand:#0f766e; --brand-fg:#ffffff; --ink:#1d211f; --ink-fg:#f6f6f3;
+  --good:#18794e; --warn:#a85d00; --bad:#b42a2a; --radius:8px; --row:42px; --display:"Schibsted Grotesk", sans-serif; --body:"Geist", sans-serif; --dwdth: 100; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .dir-a { --bg:#0f1524; --surface:#161e31; --fg:#e8ecf5; --muted:#97a1b8; --line:#26304a; --brand:#f2a91f; --brand-fg:#1a1200; --ink:#1d2944; --ink-fg:#e8ecf5; --good:#4cc28a; --warn:#f0a040; --bad:#ff6b70 }
+  :root:not([data-theme="light"]) .dir-b { --bg:#0e1124; --surface:#171b36; --fg:#eef0ff; --muted:#a0a7cf; --line:#272c52; --brand:#7d93ff; --brand-fg:#0e1124; --ink:#3a55e8; --ink-fg:#ffffff; --good:#4fcf8c; --warn:#f2a25a; --bad:#ff7a82 }
+  :root:not([data-theme="light"]) .dir-c { --bg:#141716; --surface:#1b1f1d; --fg:#ecefed; --muted:#9da5a1; --line:#2b302d; --brand:#2fb3a6; --brand-fg:#0c1514; --ink:#ecefed; --ink-fg:#141716; --good:#55c48d; --warn:#e9a24c; --bad:#ff7b7b } }
+:root[data-theme="dark"] .dir-a { --bg:#0f1524; --surface:#161e31; --fg:#e8ecf5; --muted:#97a1b8; --line:#26304a; --brand:#f2a91f; --brand-fg:#1a1200; --ink:#1d2944; --ink-fg:#e8ecf5; --good:#4cc28a; --warn:#f0a040; --bad:#ff6b70 }
+:root[data-theme="dark"] .dir-b { --bg:#0e1124; --surface:#171b36; --fg:#eef0ff; --muted:#a0a7cf; --line:#272c52; --brand:#7d93ff; --brand-fg:#0e1124; --ink:#3a55e8; --ink-fg:#ffffff; --good:#4fcf8c; --warn:#f2a25a; --bad:#ff7a82 }
+:root[data-theme="dark"] .dir-c { --bg:#141716; --surface:#1b1f1d; --fg:#ecefed; --muted:#9da5a1; --line:#2b302d; --brand:#2fb3a6; --brand-fg:#0c1514; --ink:#ecefed; --ink-fg:#141716; --good:#55c48d; --warn:#e9a24c; --bad:#ff7b7b }
+
+/* ---------- Direction panel ---------- */
+section.dir { background: var(--bg); color: var(--fg); font-family: var(--body); border: 1px solid var(--page-line); border-radius: 10px; overflow: hidden; scroll-margin-top: 64px }
+.dir-head { display: grid; gap: 8px; padding: 22px 22px 18px; border-bottom: 1px solid var(--line) }
+.dir-head h2 { margin: 0; font: 700 26px/1.15 var(--display); font-variation-settings: "wdth" var(--dwdth) }
+.dir-head p { margin: 0; color: var(--muted); max-width: 72ch }
+.spec { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted) }
+.spec b { color: var(--fg); font-weight: 600 }
+.swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted) }
+.swatches button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--line); cursor: pointer; padding: 0 }
+.swatches button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--fg) }
+.swatches button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px }
+.boards { display: grid; gap: 18px; padding: 18px 22px 24px }
+.board-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 6px }
+.frame { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; padding: 28px; align-items: center }
+.hero h3 { margin: 0 0 12px; font: 750 clamp(26px, 3.4vw, 40px)/1.06 var(--display); font-variation-settings: "wdth" var(--dwdth); text-wrap: balance; letter-spacing: -0.01em }
+.hero p { margin: 0 0 18px; color: var(--muted); max-width: 46ch }
+.ctas { display: flex; flex-wrap: wrap; gap: 10px }
+.btn { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: var(--radius); font-weight: 600; font-size: 14px; border: 1px solid transparent; font-family: var(--body) }
+.btn.primary { background: var(--accent); color: var(--brand-fg) }
+.btn.ghost { border-color: var(--line); color: var(--fg); background: transparent }
+.deal { font-size: 13px; color: var(--muted); margin-top: 14px }
+.deal strong { color: var(--fg) }
+.preview { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); padding: 14px; display: grid; gap: 10px }
+.msg { padding: 10px 12px; border-radius: var(--radius); font-size: 13px; max-width: 85% }
+.msg.in { background: var(--surface); border: 1px solid var(--line) }
+.msg.out { background: var(--accent); color: var(--brand-fg); justify-self: end }
+.msg small { display: block; opacity: .75; font-size: 11px; margin-top: 3px }
+.consent { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: inline-block; flex: none }
+
+/* Dashboard */
+.app { display: grid; grid-template-columns: 190px minmax(0, 1fr) }
+.side { background: var(--ink); color: var(--ink-fg); padding: 14px 10px; display: grid; align-content: start; gap: 2px; font-size: 13px }
+.side .org { font-weight: 700; padding: 6px 8px 12px; font-family: var(--display); display: flex; align-items: center; gap: 8px }
+.side .org i { width: 18px; height: 18px; border-radius: 5px; background: var(--accent); display: inline-block }
+.side a { color: inherit; text-decoration: none; padding: 7px 8px; border-radius: calc(var(--radius) - 1px); opacity: .78 }
+.side a.on { opacity: 1; background: color-mix(in srgb, var(--ink-fg) 12%, transparent); font-weight: 600 }
+.main { padding: 18px; display: grid; gap: 16px; min-width: 0 }
+.main h4 { margin: 0; font: 700 20px/1.2 var(--display); font-variation-settings: "wdth" var(--dwdth) }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px }
+.kpi { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; background: var(--bg); display: grid; gap: 2px }
+.kpi span { font-size: 12px; color: var(--muted) }
+.kpi b { font: 700 22px/1.2 var(--display); font-variant-numeric: tabular-nums }
+.kpi em { font-style: normal; font-size: 12px; font-variant-numeric: tabular-nums }
+.up { color: var(--good) } .down { color: var(--bad) }
+.chart { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; background: var(--bg) }
+.chart svg { width: 100%; height: 130px; display: block }
+.chart .cap { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px }
+
+/* Table */
+.tbl-wrap { overflow-x: auto }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px }
+th { text-align: left; font-weight: 600; color: var(--muted); padding: 0 12px; height: 36px; border-bottom: 1px solid var(--line); background: var(--bg); white-space: nowrap }
+td { padding: 0 12px; height: var(--row); border-bottom: 1px solid var(--line); white-space: nowrap }
+td.num { font-variant-numeric: tabular-nums; text-align: right }
+th.num { text-align: right }
+tr:last-child td { border-bottom: 0 }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); align-items: center }
+.chip { font-size: 12px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted) }
+.chip.on { border-color: var(--accent); color: var(--fg); font-weight: 600 }
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center }
+.pill.ok { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent) }
+.pill.no { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent) }
+.pill.wait { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent) }
+.sample { font-size: 12px; color: var(--muted); padding: 8px 12px }
+
+/* Direction-specific personality */
+.dir-a .hero h3 { text-transform: none; font-variation-settings: "wdth" 70; font-size: clamp(30px, 4.2vw, 50px) }
+.dir-a .kpi b, .dir-a .main h4 { font-variation-settings: "wdth" 75 }
+.dir-a .kpi { border-left: 3px solid var(--accent) }
+.dir-b .hero { background: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--pop) 16%, transparent), transparent 60%) }
+.dir-b .msg.in { border-radius: 16px 16px 16px 4px } .dir-b .msg.out { border-radius: 16px 16px 4px 16px }
+.dir-b .kpi { background: var(--surface); border-color: transparent }
+.dir-c .side { background: var(--surface); color: var(--fg); border-right: 1px solid var(--line) }
+.dir-c .side a.on { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--fg) }
+.dir-c .hero h3 { letter-spacing: -0.025em }
+
+footer.notes { color: var(--page-muted); font-size: 14px; display: grid; gap: 6px; max-width: 75ch }
+
+@media (max-width: 860px) {
+  .hero { grid-template-columns: minmax(0, 1fr) }
+  .app { grid-template-columns: minmax(0, 1fr) }
+  .side { display: flex; flex-wrap: wrap; gap: 4px }
+  .side .org { width: 100%; padding-bottom: 6px }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+}
+@media (prefers-reduced-motion: no-preference) { .btn, .chip, .swatches button { transition: background-color .15s, box-shadow .15s } }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <h1>Three directions for the new Lead Daddy</h1>
+    <p>Each direction shows the same three things: the marketing hero that PPC and AppSumo traffic lands on, the dashboard, and the contacts table. Every panel has client-brand swatches, because a white-label agency has to be able to make Lead Daddy look like its own product.</p>
+    <p class="gate">Steve: pick one direction (or name what to take from each). Nothing ships until you choose.</p>
+  </header>
+  <nav class="jump" aria-label="Directions">
+    <a href="#switchboard">A · Switchboard</a>
+    <a href="#open-line">B · Open Line</a>
+    <a href="#house-brand">C · House Brand</a>
+  </nav>
+  <div id="panels" class="wrap"></div>
+  <footer class="notes">
+    <p>All figures, names and messages in the mocks are sample data, not real contacts or results.</p>
+    <p>References: Mobbin collection "Lead Daddy Redesign" (44 screens, 10 flows). Audit baseline: 65 hex colors and 367 color utilities in the current app, 3% on semantic tokens. Whichever direction wins becomes one token set with light, dark and white-label themes.</p>
+  </footer>
+</div>
+
+<script>
+const DIRS = [
+  { id: "switchboard", cls: "dir-a", name: "A · Switchboard",
+    pitch: "An operator's console. Dense rows, a condensed grotesque for numbers and headings, and a signal-amber accent taken from call-status lights. Built for agencies that live in the dialer and inbox all day.",
+    spec: [["Type","Archivo (condensed widths) + Public Sans"],["Density","Compact, 34px rows"],["Corners","4px"],["Icons","Lucide, 1.5px stroke"],["Motion","Status changes only"]],
+    hero: ["Every lead answered before your competitor dials.", "Texts, calls and pipeline in one console, under your agency's name."],
+    swatches: ["#d98a00","#c2185b","#00897b","#3949ab"] },
+  { id: "open-line", cls: "dir-b", name: "B · Open Line",
+    pitch: "Friendly and roomy for small agencies and first-time CRM buyers from AppSumo. A characterful grotesque, a cobalt accent with a coral highlight, generous spacing and conversational bubbles.",
+    spec: [["Type","Bricolage Grotesque + Figtree"],["Density","Relaxed, 50px rows"],["Corners","14px"],["Icons","Lucide, 2px stroke"],["Motion","One welcome moment on first run"]],
+    hero: ["Your clients text back. Lead Daddy keeps the conversation going.", "A CRM your clients will actually open, branded as yours."],
+    swatches: ["#2a46d6","#e0533d","#0f8a5f","#7b3fe4"] },
+  { id: "house-brand", cls: "dir-c", name: "C · House Brand",
+    pitch: "A quiet, near-neutral chassis designed to disappear behind the agency's brand. One accent does all the color work, so any client color looks native. Closest to a premium B2B tool.",
+    spec: [["Type","Schibsted Grotesk + Geist"],["Density","Balanced, 42px rows"],["Corners","8px"],["Icons","Lucide, 1.75px stroke"],["Motion","Panel transitions only"]],
+    hero: ["The CRM your agency sells as its own.", "Contacts, campaigns, phone and sites. Your logo, your colors, your domain."],
+    swatches: ["#0f766e","#b45309","#1d4ed8","#be123c"] }
+];
+const ROWS = [
+  ["Maria Delgado","Delgado Roofing","New lead","granted","4,800","2m ago"],
+  ["Kevin Osei","Osei HVAC","Quoted","granted","12,350","18m ago"],
+  ["Priya Natarajan","Bright Smile Dental","Booked","granted","3,200","1h ago"],
+  ["Tom Becker","Becker Auto Glass","New lead","pending","—","3h ago"],
+  ["Alana Reyes","Reyes Law Group","Won","granted","9,750","Yesterday"],
+  ["Sam Whitfield","Whitfield Plumbing","Opted out","revoked","—","2d ago"]
+];
+const SERIES = [12,18,15,22,27,24,31,35,33,41,46,52];
+
+function chart() {
+  const w = 600, h = 130, pad = 18, max = 60;
+  const xs = i => pad + i * (w - pad * 2) / (SERIES.length - 1);
+  const ys = v => h - pad - v / max * (h - pad * 2);
+  const pts = SERIES.map((v, i) => `${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(" ");
+  const area = `M${xs(0)},${h - pad} L${pts.replace(/ /g, " L")} L${xs(SERIES.length - 1)},${h - pad} Z`;
+  const grid = [0, 20, 40, 60].map(v => `<line x1="${pad}" x2="${w - pad}" y1="${ys(v)}" y2="${ys(v)}" stroke="var(--line)" stroke-width="1"/>`).join("");
+  const last = SERIES.length - 1;
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Replies per week, sample data, rising from 12 to 52">
+    ${grid}<path d="${area}" fill="var(--accent)" fill-opacity="0.12"/>
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" vector-effect="non-scaling-stroke"/>
+    <circle cx="${xs(last)}" cy="${ys(SERIES[last])}" r="4" fill="var(--accent)"/></svg>`;
+}
+function pill(c) {
+  if (c === "granted") return `<span class="pill ok"><span class="dot"></span>SMS consent</span>`;
+  if (c === "revoked") return `<span class="pill no">Opted out</span>`;
+  return `<span class="pill wait">Consent needed</span>`;
+}
+function panel(d) {
+  return `<section class="dir ${d.cls}" id="${d.id}" aria-labelledby="${d.id}-h">
+  <div class="dir-head">
+    <h2 id="${d.id}-h">${d.name}</h2>
+    <p>${d.pitch}</p>
+    <div class="spec">${d.spec.map(([k, v]) => `<span><b>${k}:</b> ${v}</span>`).join("")}</div>
+    <div class="swatches" role="group" aria-label="Try a client brand color">Client brand:
+      ${d.swatches.map((c, i) => `<button type="button" id="${d.id}-sw${i}" style="background:${c}" data-color="${c}" aria-pressed="${i === 0}" aria-label="Brand color ${c}"></button>`).join("")}
+    </div>
+  </div>
+  <div class="boards">
+    <div><p class="board-label">Marketing hero</p>
+      <div class="frame hero">
+        <div>
+          <h3>${d.hero[0]}</h3>
+          <p>${d.hero[1]}</p>
+          <div class="ctas"><span class="btn primary">Start free trial</span><span class="btn ghost">Redeem AppSumo code</span></div>
+          <p class="deal"><strong>Black Friday:</strong> lifetime deal opens Nov 27.</p>
+        </div>
+        <div class="preview" aria-label="Sample SMS conversation">
+          <div class="msg in">Hi, do you have anything open Thursday for a roof inspection?<small>Maria · 10:42</small></div>
+          <div class="msg out">Yes! Thursday 9am or 1pm work. Which is better?<small>Delgado Roofing · 10:42</small></div>
+          <div class="msg in">1pm please<small>Maria · 10:44</small></div>
+          <div class="consent"><span class="dot"></span>Consent on file · Reply STOP to opt out</div>
+        </div>
+      </div></div>
+    <div><p class="board-label">Dashboard</p>
+      <div class="frame app">
+        <nav class="side" aria-label="Sample app navigation"><span class="org"><i></i>Delgado Roofing</span>
+          <a class="on">Home</a><a>CRM</a><a>Campaigns</a><a>Sites</a><a>Content</a><a>Reports</a><a>Settings</a></nav>
+        <div class="main">
+          <h4>Good morning, Steve</h4>
+          <div class="kpis">
+            <div class="kpi"><span>New leads (7d)</span><b>148</b><em class="up">+22% vs last week</em></div>
+            <div class="kpi"><span>Reply rate</span><b>38.4%</b><em class="up">+4.1 pts</em></div>
+            <div class="kpi"><span>Booked calls</span><b>31</b><em class="down">−3 vs last week</em></div>
+            <div class="kpi"><span>Pipeline value</span><b>$84,200</b><em class="up">+$9,450</em></div>
+          </div>
+          <div class="chart"><div class="cap"><span>Replies per week</span><span>Last 12 weeks</span></div>${chart()}</div>
+        </div>
+      </div></div>
+    <div><p class="board-label">Contacts table</p>
+      <div class="frame">
+        <div class="tools"><span class="chip on">All contacts</span><span class="chip">Hot leads</span><span class="chip">Needs consent</span><span class="chip">+ Save view</span></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Name</th><th>Company</th><th>Stage</th><th>Consent</th><th class="num">Deal value ($)</th><th>Last activity</th></tr></thead>
+          <tbody>${ROWS.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${pill(r[3])}</td><td class="num">${r[4]}</td><td>${r[5]}</td></tr>`).join("")}</tbody>
+        </table></div>
+        <p class="sample">Sample data</p>
+      </div></div>
+  </div>
+</section>`;
+}
+document.getElementById("panels").innerHTML = DIRS.map(panel).join("");
+document.querySelectorAll(".swatches button").forEach(b => b.addEventListener("click", () => {
+  const sec = b.closest("section.dir");
+  sec.style.setProperty("--accent", b.dataset.color);
+  sec.querySelectorAll(".swatches button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+}));
+function showHash() { const el = location.hash && document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
+window.addEventListener("hashchange", showHash); showHash();
+</script>
