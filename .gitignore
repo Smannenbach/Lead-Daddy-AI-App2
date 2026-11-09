@@ -1,0 +1,32 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# env files — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# misc build artifacts
+*.tsbuildinfo
+next-env.d.ts
+
+# vercel
+.vercel
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.pem
+
+# one-off provisioning / inspection scripts (contain API call patterns, no secrets)
+.*-tmp.cjs
+
+.vercel
+.env*
