@@ -152,10 +152,11 @@ export function supabaseSmsStore(db: SupabaseClient, org: string): SmsGuardStore
       return (data ?? []) as { id: string; custom_fields: Record<string, unknown> | null }[];
     },
     async hasOptOutEvent(canonical) {
+      // Deliberately NOT org-filtered (matches the main app's telephony-engine): a STOP recorded
+      // under any org is a refusal from that person, and an opt-out must always win.
       const shared = await db
         .from("sms_opt_outs")
         .select("id")
-        .eq("organization_id", org)
         .eq("phone_e164", canonical)
         .limit(1);
       if (shared.error) throw new Error(shared.error.message);
