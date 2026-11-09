@@ -36,7 +36,7 @@ export const PROVIDERS: ProviderSpec[] = [
   },
   {
     key: "qwen", label: "Qwen", envKey: "QWEN_API_KEY", modelEnv: "QWEN_MODEL",
-    defaultModel: "qwen-plus", baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    defaultModel: "qwen/qwen3.8-27b", baseUrl: "https://openrouter.ai/api/v1",
     inputPerM: 0.8, outputPerM: 2, strengths: ["long-context", "digest", "cheap"],
   },
   {
