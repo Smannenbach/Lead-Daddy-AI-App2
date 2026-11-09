@@ -12,7 +12,7 @@ export interface SequenceStep {
 export interface StepRun {
   leadId: string;
   stepIndex: number;
-  status: "sent" | "skipped_no_consent" | "skipped_unverified" | "failed";
+  status: "sent" | "skipped_no_consent" | "skipped_unverified" | "skipped_opted_out" | "skipped_daily_cap" | "failed";
   at: string; // ISO
   detail?: string;
 }

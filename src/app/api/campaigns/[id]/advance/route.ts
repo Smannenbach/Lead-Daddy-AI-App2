@@ -5,6 +5,7 @@ import { nextDueStep, skipReason, type SequenceState, type StepRun, type Channel
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
 import { sendEmail } from "@/lib/channels/email";
 import { sendSms, startCall } from "@/lib/channels/twilio";
+import { guardedSendSms, isNumberOptedOut, supabaseSmsStore } from "@/lib/channels/sms-guard";
 
 interface TargetAudience {
   leadIds?: string[];
@@ -71,8 +72,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (step.channel === "email" && contact.email) {
         await sendEmail({ to: contact.email, subject: step.subject ?? "A note from LeadDaddy.ai", html: step.body });
       } else if (step.channel === "sms" && contact.phone) {
-        await sendSms(contact.phone, step.body);
+        const res = await guardedSendSms(
+          supabaseSmsStore(db, organizationId()),
+          contact.phone,
+          step.body,
+          { purpose: "marketing", consentGranted: tcpaConsent },
+          sendSms,
+        );
+        if (!res.sent) {
+          const status: StepRun["status"] =
+            res.reason === "opted_out" ? "skipped_opted_out"
+            : res.reason === "no_consent" ? "skipped_no_consent"
+            : res.reason === "daily_cap" ? "skipped_daily_cap"
+            : "failed";
+          runs.push({ leadId: contact.id, stepIndex, status, at: new Date().toISOString(), detail: res.reason });
+          continue;
+        }
       } else if (step.channel === "call" && contact.phone) {
+        // Fails closed: if opt-out state can't be read, isNumberOptedOut throws -> recorded as failed.
+        if (await isNumberOptedOut(supabaseSmsStore(db, organizationId()), contact.phone)) {
+          runs.push({ leadId: contact.id, stepIndex, status: "skipped_opted_out", at: new Date().toISOString() });
+          continue;
+        }
         await startCall(contact.phone, step.body);
       }
       runs.push({ leadId: contact.id, stepIndex, status: "sent", at: new Date().toISOString() });

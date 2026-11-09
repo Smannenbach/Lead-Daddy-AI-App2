@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendSms } from "@/lib/channels/twilio";
+import { guardedSendSms, phoneVariants, supabaseSmsStore } from "@/lib/channels/sms-guard";
 import { sendEmail } from "@/lib/channels/email";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
 import type { SequenceState, SequenceStep } from "@/lib/campaigns/sequences";
@@ -280,7 +281,15 @@ export async function PUT(request: Request) {
 
   try {
     if (body.channel === "sms") {
-      await sendSms(body.to, body.text ?? "");
+      // Direct sends are marketing: consent must be on file for a contact with this number.
+      const db = createServiceClient();
+      const store = supabaseSmsStore(db, organizationId());
+      const matches = await store.contactsByPhone(phoneVariants(body.to));
+      const consentGranted = matches.some((c) => (c.custom_fields ?? {}).tcpa_consent === "granted");
+      const res = await guardedSendSms(store, body.to, body.text ?? "", { purpose: "marketing", consentGranted }, sendSms);
+      if (!res.sent) {
+        return Response.json({ error: `SMS not sent: ${res.reason}` }, { status: res.reason === "guard_unavailable" ? 503 : 403 });
+      }
     } else {
       await sendEmail({ to: body.to, subject: body.subject ?? "LeadDaddy.ai", html: body.text ?? "" });
     }
