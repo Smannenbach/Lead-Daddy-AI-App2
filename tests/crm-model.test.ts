@@ -7,6 +7,7 @@ import {
   historyFor,
   mergeCustomFields,
   normalizeStage,
+  readTimeline,
   sanitizePatch,
   summarize,
   toCsv,
@@ -156,12 +157,27 @@ describe("timeline", () => {
     expect(h.map((e) => e.type)).toEqual(["stage_changed", "field_changed", "note"]);
     expect(h[0].detail).toBe("Stage: new → qualified");
   });
-  it("caps stored history and drops malformed entries", () => {
-    const stored = [{ bogus: true }, ...Array.from({ length: MAX_TIMELINE }, (_, i) => ({ type: "note", at: String(i), by: null, detail: "x" }))];
+  it("caps history but never rewrites or drops older entries of other shapes", () => {
+    const legacy = { date: "2026-10-01T00:00:00Z", type: "email_sent", description: "Sent email: Hello", outcome: "sent" };
+    const stored = [legacy, ...Array.from({ length: 10 }, (_, i) => ({ type: "note", at: String(i), by: null, detail: "x" }))];
     const out = appendTimeline(stored, [{ type: "note", at: "new", by: null, detail: "latest" }]);
-    expect(out).toHaveLength(MAX_TIMELINE);
-    expect(out.at(-1)?.detail).toBe("latest");
-    expect(out[0].at).toBe("1");
+    expect(out[0]).toBe(legacy);
+    expect(out).toHaveLength(12);
+    const full = appendTimeline(Array.from({ length: MAX_TIMELINE }, (_, i) => ({ i })), [{ type: "note", at: "z", by: null, detail: "z" }]);
+    expect(full).toHaveLength(MAX_TIMELINE);
+    expect((full[0] as { i: number }).i).toBe(1);
+  });
+  it("reads legacy shapes for display and skips junk", () => {
+    const t = readTimeline([
+      { date: "2026-10-01T00:00:00Z", type: "email_sent", description: "Sent email: Hello" },
+      { timestamp: "2026-10-02T00:00:00Z", type: "note", description: "Left voicemail" },
+      { bogus: true },
+      null,
+    ]);
+    expect(t).toEqual([
+      { type: "system", at: "2026-10-01T00:00:00Z", by: null, detail: "Sent email: Hello" },
+      { type: "note", at: "2026-10-02T00:00:00Z", by: null, detail: "Left voicemail" },
+    ]);
   });
 });
 

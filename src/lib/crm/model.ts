@@ -522,12 +522,35 @@ export function mergeCustomFields(stored: unknown, patch: Record<string, string 
 
 export const MAX_TIMELINE = 200;
 
+const TIMELINE_TYPES = new Set(["created", "stage_changed", "field_changed", "note", "verified", "system"]);
+
+function firstString(o: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return null;
+}
+
+/**
+ * Normalizes stored history for display. Older writers (email/SMS composers, Base44) used
+ * other shapes ({ date|timestamp, description|content }); those are shown, not discarded.
+ */
 export function readTimeline(stored: unknown): TimelineEntry[] {
   if (!Array.isArray(stored)) return [];
-  return stored.filter(
-    (e): e is TimelineEntry =>
-      !!e && typeof e === "object" && typeof (e as TimelineEntry).at === "string" && typeof (e as TimelineEntry).detail === "string",
-  );
+  const out: TimelineEntry[] = [];
+  for (const e of stored) {
+    if (!e || typeof e !== "object" || Array.isArray(e)) continue;
+    const o = e as Record<string, unknown>;
+    const at = firstString(o, ["at", "timestamp", "date", "created_at", "created_date"]);
+    const detail = firstString(o, ["detail", "description", "content", "message", "summary", "body"]);
+    if (!at || !detail) continue;
+    const rawType = typeof o.type === "string" ? o.type : "system";
+    const type = (TIMELINE_TYPES.has(rawType) ? rawType : rawType.includes("note") ? "note" : "system") as TimelineEntry["type"];
+    const by = firstString(o, ["by", "user", "author", "actor"]);
+    out.push({ type, at, by, detail });
+  }
+  return out;
 }
 
 /** Timeline entries describing what a patch changes. Pure: caller supplies time + actor. */
@@ -557,8 +580,10 @@ export function historyFor(
   return entries;
 }
 
-export function appendTimeline(stored: unknown, entries: TimelineEntry[]): TimelineEntry[] {
-  return [...readTimeline(stored), ...entries].slice(-MAX_TIMELINE);
+/** Appends without rewriting or dropping existing entries of any shape (only the oldest beyond the cap). */
+export function appendTimeline(stored: unknown, entries: TimelineEntry[]): unknown[] {
+  const existing = Array.isArray(stored) ? stored : [];
+  return [...existing, ...entries].slice(-MAX_TIMELINE);
 }
 
 /** Request body for saving one field from the UI (custom fields go under `custom`). */
