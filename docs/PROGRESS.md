@@ -134,3 +134,7 @@ key ever reaches the browser."
 - Composio/social: DEGRADED (no live raw key; the Composio MCP session auth is separate). Not BFCM-critical; regenerate at dashboard.composio.dev.
 - LESSON (all agents): the secrets-doc keys churn fast — always probe before launch days; Vercel PATs can't decrypt env values (decrypt=true returns masked/empty); Vercel env values can't be PATCHed in place (DELETE+POST).
 - Sign-ins: mykoal@loandaddy.ai SIGNED IN 07:24 UTC. steve@loandaddy.ai pending click.
+
+## Password auth (2026-11-09)
+- Email+password logins enabled for steve@loandaddy.ai + mykoal@loandaddy.ai (passwords set via admin API on the shared project; sign-in verified via password grant — sessions issued). Login page now has Password / Magic-link toggle. Magic links remain as fallback.
+- Note: the shared Supabase project also backs the main leaddaddy.ai Base44 app — if it uses Supabase email auth, the same credentials work there (test on leaddaddy.ai login).
