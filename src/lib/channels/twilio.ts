@@ -15,6 +15,28 @@ function fromNumber(): string {
   return from;
 }
 
+/**
+ * Voice caller-ID pool: comma-separated E.164 numbers (TWILIO_SENDER_POOL).
+ * Round-robins so outbound AI calls rotate across your Lead Daddy numbers.
+ * NOTE: only include numbers whose inbound webhooks you accept — if a callee
+ * calls back, their call hits that number's configured voice webhook.
+ */
+let poolCursor = 0;
+export function senderPool(): string[] {
+  return (process.env.TWILIO_SENDER_POOL ?? "")
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+}
+
+function nextFromNumber(): string {
+  const pool = senderPool();
+  if (pool.length === 0) return fromNumber();
+  const num = pool[poolCursor % pool.length];
+  poolCursor += 1;
+  return num;
+}
+
 async function twilioPost(path: string, params: Record<string, string>): Promise<Record<string, unknown>> {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const res = await fetch(`${TWILIO_BASE}/Accounts/${sid}/${path}`, {
@@ -42,7 +64,7 @@ export async function startCall(to: string, context?: string): Promise<Record<st
   if (!base) throw new Error("APP_BASE_URL not configured (needed for voice webhook)");
   return twilioPost("Calls.json", {
     To: to,
-    From: fromNumber(),
+    From: nextFromNumber(),
     Url: `${base}/api/channels/voice${context ? `?context=${encodeURIComponent(context.slice(0, 400))}` : ""}`,
   });
 }
