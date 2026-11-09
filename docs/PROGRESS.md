@@ -123,3 +123,7 @@ key ever reaches the browser."
 ## Production pipeline proof + hotfixes (2026-11-09)
 - FULL LOOP PROVEN LIVE: Reoon verify (real API, "safe"->valid) -> contact+verification rows -> live campaign -> advance via cron credential -> SendGrid email sent ({"advanced":true,"sent":1}) -> cleanup. One PIPELINE TEST email delivered to steve@loandaddy.ai.
 - Hotfixes found BY the proof: (1) Reoon "safe" status unmapped -> launch gate would reject good emails; (2) proxy matcher 307'd cron calls (edge runtime can't read non-NEXT_PUBLIC env; campaigns routes self-protect so removed from matcher); (3) CLI-pushed CRON_SECRET was corrupted/empty and shadowed the fallback — deleted; cron/advance now auth via SUPABASE_SERVICE_ROLE_KEY (server-to-server), documented in OPS.md.
+
+## Voice agent PROVEN LIVE (2026-11-09)
+- Signed webhook simulation against production: POST /api/channels/voice with valid X-Twilio-Signature -> signature validated -> auto-select picked Claude -> sales-caller persona produced a compliant DSCR answer ("business-purpose... qualified on rental income...") -> TwiML returned. Full AI voice loop verified without needing a PSTN call.
+- Key rotation incident: the docx "Anthropic API Key" died (401) mid-launch; rotated to "Claude - Autonomous-Agents" key in .env.local + Vercel (delete+recreate — PATCH cannot change values). LESSON: these keys churn fast; probe before launch days; health endpoint reports presence not liveness.
