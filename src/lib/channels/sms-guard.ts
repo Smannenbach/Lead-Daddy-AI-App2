@@ -12,7 +12,9 @@ export type SmsResult = { sent: true } | { sent: false; reason: "opted_out" | "n
 
 export interface SmsGuardStore {
   contactsByPhone(variants: string[]): Promise<{ id: string; custom_fields: Record<string, unknown> | null }[]>;
+  /** Number-level opt-out: the shared `sms_opt_outs` table (also used by the main app) or a legacy event. */
   hasOptOutEvent(canonical: string): Promise<boolean>;
+  recordNumberOptOut(canonical: string, contactId: string | null): Promise<void>;
   countOutboundSince(iso: string): Promise<number>;
   updateContactFields(id: string, fields: Record<string, unknown>): Promise<void>;
   logEvent(type: string, detail: string, data: Record<string, unknown>): Promise<void>;
@@ -103,6 +105,7 @@ export async function recordOptOut(store: SmsGuardStore, from: string, nowIso: s
   for (const c of contacts) {
     await store.updateContactFields(c.id, { ...(c.custom_fields ?? {}), tcpa_consent: "revoked", opted_out_at: nowIso });
   }
+  await store.recordNumberOptOut(canonicalPhone(from), contacts[0]?.id ?? null);
   await store.logEvent("sms_optout", "STOP received", { phone: canonicalPhone(from), contactIds: contacts.map((c) => c.id) });
 }
 
@@ -120,6 +123,14 @@ export function supabaseSmsStore(db: SupabaseClient, org: string): SmsGuardStore
       return (data ?? []) as { id: string; custom_fields: Record<string, unknown> | null }[];
     },
     async hasOptOutEvent(canonical) {
+      const shared = await db
+        .from("sms_opt_outs")
+        .select("id")
+        .eq("organization_id", org)
+        .eq("phone_e164", canonical)
+        .limit(1);
+      if (shared.error) throw new Error(shared.error.message);
+      if ((shared.data ?? []).length > 0) return true;
       const { data, error } = await db
         .from("lead_event")
         .select("id")
@@ -129,6 +140,18 @@ export function supabaseSmsStore(db: SupabaseClient, org: string): SmsGuardStore
         .limit(1);
       if (error) throw new Error(error.message);
       return (data ?? []).length > 0;
+    },
+    async recordNumberOptOut(canonical, contactId) {
+      const { error } = await db.from("sms_opt_outs").insert({
+        organization_id: org,
+        phone_e164: canonical,
+        channel: "sms",
+        reason: "STOP",
+        source: "inbound_webhook",
+        contact_id: contactId,
+      });
+      // 23505 = already opted out (unique index): the refusal is already on record.
+      if (error && error.code !== "23505") throw new Error(error.message);
     },
     async countOutboundSince(iso) {
       const { count, error } = await db

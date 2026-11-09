@@ -10,9 +10,10 @@ import {
 
 type Contact = { id: string; phone: string; custom_fields: Record<string, unknown> };
 
-function memoryStore(contacts: Contact[], opts: { failReads?: boolean; sentToday?: number } = {}) {
+function memoryStore(contacts: Contact[], opts: { failReads?: boolean; sentToday?: number; sharedOptOuts?: string[] } = {}) {
   const events: { type: string; data: Record<string, unknown> }[] = [];
   let outbound = opts.sentToday ?? 0;
+  const sharedOptOuts = new Set<string>(opts.sharedOptOuts ?? []);
   const store: SmsGuardStore = {
     async contactsByPhone(variants) {
       if (opts.failReads) throw new Error("db down");
@@ -20,7 +21,10 @@ function memoryStore(contacts: Contact[], opts: { failReads?: boolean; sentToday
     },
     async hasOptOutEvent(canonical) {
       if (opts.failReads) throw new Error("db down");
-      return events.some((e) => e.type === "sms_optout" && e.data.phone === canonical);
+      return sharedOptOuts.has(canonical) || events.some((e) => e.type === "sms_optout" && e.data.phone === canonical);
+    },
+    async recordNumberOptOut(canonical) {
+      sharedOptOuts.add(canonical);
     },
     async countOutboundSince() {
       if (opts.failReads) throw new Error("db down");
@@ -35,7 +39,7 @@ function memoryStore(contacts: Contact[], opts: { failReads?: boolean; sentToday
       if (type === "sms_outbound") outbound += 1;
     },
   };
-  return { store, events, contacts };
+  return { store, events, contacts, sharedOptOuts };
 }
 
 function recorder() {
@@ -155,5 +159,19 @@ describe("recordOptOut", () => {
     const r = recorder();
     const res = await guardedSendSms(store, "+14805550100", "hi", { purpose: "marketing", consentGranted: true }, r.send);
     expect(res).toEqual({ sent: false, reason: "opted_out" });
+  });
+});
+
+describe("shared opt-out table", () => {
+  it("blocks a number the main app recorded in sms_opt_outs", async () => {
+    const { store } = memoryStore([], { sharedOptOuts: ["+14805550100"] });
+    const r = recorder();
+    const res = await guardedSendSms(store, "480-555-0100", "hi", { purpose: "marketing", consentGranted: true }, r.send);
+    expect(res).toEqual({ sent: false, reason: "opted_out" });
+  });
+  it("writes STOPs to the shared table so the main app honours them too", async () => {
+    const { store, sharedOptOuts } = memoryStore([]);
+    await recordOptOut(store, "(480) 555-0100", "2026-11-09T00:00:00Z");
+    expect(sharedOptOuts.has("+14805550100")).toBe(true);
   });
 });
