@@ -69,6 +69,40 @@ function statusBadge(status: string | null) {
 
 const EMPTY_FORM = { first_name: "", last_name: "", email: "", phone: "", company: "", job_title: "", tcpa_consent: false };
 
+type LoadState = "loading" | "ok" | "error";
+
+/** Why a console API call failed, in words the user can act on. */
+function describeFailure(status: number, body: unknown): string {
+  const apiError =
+    body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string"
+      ? (body as { error: string }).error
+      : "";
+  if (status === 401) return "Your session has expired. Sign in again.";
+  if (status === 403) return "This account isn't on the team allowlist (ALLOWED_EMAILS). Ask an admin to add it.";
+  return apiError ? `Server error (${status}): ${apiError}` : `Server error (${status}).`;
+}
+
+/**
+ * GET a console API route and parse JSON, failing loudly instead of silently.
+ * The proxy answers signed-out requests with a 307 to /login, which fetch follows
+ * and returns as 200 text/html, so a non-JSON body is treated as an expired session.
+ */
+async function getJson<T>(path: string): Promise<{ ok: true; data: T } | { ok: false; status: number; message: string }> {
+  let res: Response;
+  try {
+    res = await fetch(path, { cache: "no-store" });
+  } catch {
+    return { ok: false, status: 0, message: "Can't reach the server. Check your connection and retry." };
+  }
+  const isJson = (res.headers.get("content-type") ?? "").includes("application/json");
+  if (res.redirected || !isJson) {
+    return { ok: false, status: 401, message: describeFailure(401, null) };
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) return { ok: false, status: res.status, message: describeFailure(res.status, body) };
+  return { ok: true, data: body as T };
+}
+
 export default function Console() {
   const router = useRouter();
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
@@ -86,19 +120,65 @@ export default function Console() {
   const [importBusy, setImportBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
+  const [leadsState, setLeadsState] = useState<LoadState>("loading");
+  const [campaignsState, setCampaignsState] = useState<LoadState>("loading");
+  const [loadErrors, setLoadErrors] = useState<Record<string, { status: number; message: string }>>({});
+  const sessionExpired = Object.values(loadErrors).some((e) => e.status === 401);
+
+  function recordLoad(key: string, failure: { status: number; message: string } | null) {
+    setLoadErrors((prev) => {
+      const next = { ...prev };
+      if (failure) next[key] = failure;
+      else delete next[key];
+      return next;
+    });
+  }
+
   async function loadLeads() {
-    const res = await fetch("/api/leads");
-    const data = await res.json();
-    setLeads(Array.isArray(data.leads) ? data.leads : []);
+    setLeadsState("loading");
+    const r = await getJson<{ leads?: Lead[] }>("/api/leads");
+    if (r.ok) {
+      setLeads(Array.isArray(r.data.leads) ? r.data.leads : []);
+      setLeadsState("ok");
+      recordLoad("Leads", null);
+    } else {
+      setLeadsState("error");
+      recordLoad("Leads", r);
+    }
+  }
+
+  async function loadAi() {
+    const r = await getJson<AiInfo>("/api/ai");
+    if (r.ok) {
+      setAi({ providers: r.data.providers ?? [], agents: r.data.agents ?? [] });
+      recordLoad("AI providers", null);
+    } else {
+      recordLoad("AI providers", r);
+    }
+  }
+
+  async function refreshCampaigns() {
+    setCampaignsState((s) => (s === "ok" ? s : "loading"));
+    const r = await getJson<{ campaigns?: Campaign[] }>("/api/campaigns");
+    if (r.ok) {
+      setCampaigns(Array.isArray(r.data.campaigns) ? r.data.campaigns : []);
+      setCampaignsState("ok");
+      recordLoad("Campaigns", null);
+    } else {
+      setCampaignsState("error");
+      recordLoad("Campaigns", r);
+    }
+  }
+
+  async function loadAll() {
+    supabase().auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
+    await Promise.all([loadLeads(), loadAi(), refreshCampaigns()]);
   }
 
   useEffect(() => {
-    supabase().auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
-    fetch("/api/leads")
-      .then((r) => r.json())
-      .then((d) => setLeads(Array.isArray(d.leads) ? d.leads : []));
-    fetch("/api/ai").then((r) => r.json()).then(setAi).catch(() => {});
-    fetch("/api/campaigns").then((r) => r.json()).then((d) => setCampaigns(Array.isArray(d.campaigns) ? d.campaigns : [])).catch(() => {});
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function doScrape() {
@@ -247,12 +327,6 @@ export default function Console() {
     }
   }
 
-  async function refreshCampaigns() {
-    const res = await fetch("/api/campaigns");
-    const d = await res.json();
-    setCampaigns(Array.isArray(d.campaigns) ? d.campaigns : []);
-  }
-
   async function launchCampaign(campaignId: string) {
     setBusy(true);
     setNotice("");
@@ -361,6 +435,34 @@ export default function Console() {
           <button onClick={signOut} className="hover:text-white">Sign out</button>
         </div>
       </div>
+
+      {Object.keys(loadErrors).length > 0 && (
+        <div role="alert" className="mb-6 rounded-xl border border-red-900 bg-red-950/60 p-4 text-sm text-red-200">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-medium text-red-100">
+                {sessionExpired ? "You've been signed out." : "Part of the console didn't load."}
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {Object.entries(loadErrors).map(([what, e]) => (
+                  <li key={what}>
+                    <span className="text-red-300">{what}:</span> {e.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {sessionExpired ? (
+              <button onClick={signOut} className="shrink-0 rounded-lg bg-red-100 px-3 py-1.5 font-medium text-red-950 hover:bg-white">
+                Sign in again
+              </button>
+            ) : (
+              <button onClick={loadAll} className="shrink-0 rounded-lg border border-red-800 px-3 py-1.5 hover:border-red-600 hover:text-white">
+                Retry
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
         <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
@@ -503,7 +605,11 @@ export default function Console() {
             </button>
           </div>
         </form>
-        {campaigns.length === 0 ? (
+        {campaignsState === "loading" ? (
+          <p className="p-4 text-sm text-neutral-500">Loading campaigns…</p>
+        ) : campaignsState === "error" ? (
+          <p className="p-4 text-sm text-red-300">Campaigns couldn&apos;t load: {loadErrors.Campaigns?.message}</p>
+        ) : campaigns.length === 0 ? (
           <p className="p-4 text-sm text-neutral-500">
             No campaigns yet — create one via POST /api/campaigns, then launch it here.
           </p>
@@ -557,7 +663,11 @@ export default function Console() {
 
       <div className="rounded-xl border border-neutral-800 bg-neutral-950">
         <h2 className="border-b border-neutral-800 px-4 py-3 text-sm font-medium">Leads</h2>
-        {leads.length === 0 ? (
+        {leadsState === "loading" ? (
+          <p className="p-4 text-sm text-neutral-500">Loading leads…</p>
+        ) : leadsState === "error" ? (
+          <p className="p-4 text-sm text-red-300">Leads couldn&apos;t load: {loadErrors.Leads?.message}</p>
+        ) : leads.length === 0 ? (
           <p className="p-4 text-sm text-neutral-500">No leads yet — add one above or scrape a page.</p>
         ) : (
           <table className="w-full text-sm">
