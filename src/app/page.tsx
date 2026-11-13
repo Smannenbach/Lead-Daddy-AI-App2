@@ -135,7 +135,7 @@ export default function Console() {
   }
 
   async function loadLeads() {
-    setLeadsState("loading");
+    setLeadsState((s) => (s === "ok" ? s : "loading"));
     const r = await getJson<{ leads?: Lead[] }>("/api/leads");
     if (r.ok) {
       setLeads(Array.isArray(r.data.leads) ? r.data.leads : []);
