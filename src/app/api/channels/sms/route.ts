@@ -6,6 +6,7 @@ import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseWebhook, sendSms } from "@/lib/channels/twilio";
 import { isOptOut } from "@/lib/channels/optout";
+import { guardedSendSms, recordOptOut, supabaseSmsStore } from "@/lib/channels/sms-guard";
 import { validateTwilioSignature } from "@/lib/twilio-signature";
 import { callModelWithFallback, enabledProviders } from "@/lib/ai/providers";
 import { autoSelect } from "@/lib/ai/router";
@@ -28,13 +29,11 @@ export async function POST(request: Request) {
 
   const db = createServiceClient();
   const org = organizationId();
-  const { data: contact } = await db
-    .from("crm_contact")
-    .select("id, custom_fields")
-    .eq("organization_id", org)
-    .eq("phone", from)
-    .is("deleted_at", null)
-    .maybeSingle();
+  const store = supabaseSmsStore(db, org);
+  // A number can map to several contact rows (duplicates, different formats). Never use
+  // maybeSingle() here: it errors on duplicates and the STOP would be silently dropped.
+  const matches = await store.contactsByPhone(from).catch(() => []);
+  const contact = matches[0] ?? null;
 
   const now = new Date().toISOString();
   await db.from("lead_event").insert({
@@ -47,17 +46,21 @@ export async function POST(request: Request) {
 
   // Honor opt-out instantly and persist it.
   if (isOptOut(bodyText)) {
-    if (contact) {
-      const cf = (contact.custom_fields ?? {}) as Record<string, unknown>;
-      await db
-        .from("crm_contact")
-        .update({
-          custom_fields: { ...cf, tcpa_consent: "revoked", opted_out_at: now },
-          updated_date: now,
-        })
-        .eq("id", contact.id);
+    try {
+      await recordOptOut(store, from, now);
+    } catch (err) {
+      // Never swallow a refusal silently. Twilio only redelivers on 5xx if the number's webhook URL
+      // carries a retry override (#rc=5&rp=all) - see docs/OPS.md. The 500 also shows in logs.
+      console.error("opt-out persist failed", err);
+      return new Response("opt-out persist failed", { status: 500 });
     }
-    await sendSms(from, "You have been opted out. No further messages from LeadDaddy.ai. Reply HELP for help.");
+    await guardedSendSms(
+      store,
+      from,
+      "You have been opted out. No further messages from LeadDaddy.ai. Reply HELP for help.",
+      { purpose: "optout_confirmation" },
+      sendSms,
+    );
     return twiml();
   }
 
@@ -82,18 +85,12 @@ export async function POST(request: Request) {
       tokensIn: result.tokensIn,
       tokensOut: result.tokensOut,
     });
-    await db.from("lead_event").insert({
-      unified_lead_id: null,
-      event_type: "sms_outbound",
-      detail: reply.slice(0, 300),
-      data: { to: from, contactId: contact.id, automated: true },
-      organization_id: org,
-    });
   } catch (err) {
     console.error("sms reply failed", err);
   }
 
-  await sendSms(from, reply);
+  // The guard logs the sms_outbound event and refuses opted-out numbers.
+  await guardedSendSms(store, from, reply, { purpose: "reply" }, sendSms);
   return twiml();
 }
 
