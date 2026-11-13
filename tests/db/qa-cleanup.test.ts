@@ -12,10 +12,12 @@ const QA = [
   ["0e94d6dd-989c-4454-8f9d-9855b0873af2", "QA TEST Echo", "qa.test.echo@example.com"],
   ["e2b720db-de08-4aa6-8bf0-59ec8ca86885", "QA TEST Foxtrot", "qa.test.foxtrot@example.com"],
   ["03833dd0-0ae9-4a27-92ea-663171857446", "QA TEST this is not a csv file. Just plain text.", null],
+  ["865c62e3-06a7-4226-add9-2d109ce43d9d", "QA TEST Golf Consent", "qa.test.golf@example.com"],
+  ["60b4d871-feed-4a21-8ea7-17c22f795621", "QA TEST India Long", "qa.test.india@example.com"],
 ];
 
 describe.skipIf(!hasDb)("scripts/qa-cleanup.sql (local replica only)", () => {
-  it("soft deletes exactly the 8 QA leads and the QA campaign, nothing else", () => {
+  it("soft deletes exactly the 10 QA leads and the QA campaign, nothing else", () => {
     for (const [id, name, email] of QA) {
       exec(`insert into crm_contact (id, organization_id, first_name, email, stage) values ('${id}', '${ORG}', '${name}', ${email ? `'${email}'` : "null"}, 'New')`);
     }
@@ -31,7 +33,7 @@ describe.skipIf(!hasDb)("scripts/qa-cleanup.sql (local replica only)", () => {
     expect(names).toContain("QA TEST Lookalike"); // QA prefix but a real-looking domain: kept
     expect(names.filter((n) => QA.some(([, qa]) => qa === n))).toEqual([]);
     expect(names).toHaveLength(14); // 12 replica seed rows + the 2 above, all untouched
-    expect(sql<{ n: number }>(`select count(*)::int n from crm_contact where deleted_at is not null`)[0].n).toBe(8);
+    expect(sql<{ n: number }>(`select count(*)::int n from crm_contact where deleted_at is not null`)[0].n).toBe(10);
     expect(sql<{ status: string }>(`select status from marketing_campaign where name = 'QA TEST Campaign'`)[0].status).toBe("deleted");
   });
 });
