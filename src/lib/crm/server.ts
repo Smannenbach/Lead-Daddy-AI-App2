@@ -62,6 +62,27 @@ export async function getRecord(id: string): Promise<{ record: CrmRecord; timeli
   return { record, timeline: readTimeline(row.engagement_history).slice().reverse() };
 }
 
+type Db = ReturnType<typeof createServiceClient>;
+
+/**
+ * Postgres keeps timestamptz to the microsecond, but JS Date only to the millisecond.
+ * Compare the full value so two saves in the same millisecond still differ.
+ */
+export function toMicros(ts: string): bigint | null {
+  const m = /^(.*T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?::?\d{2})?)?$/.exec(ts.trim().replace(" ", "T"));
+  if (!m) return null;
+  const whole = Date.parse(`${m[1]}${m[3] === undefined ? "Z" : m[3] === "Z" ? "Z" : m[3].length === 3 ? `${m[3]}:00` : m[3]}`);
+  if (Number.isNaN(whole)) return null;
+  const frac = (m[2] ?? "").padEnd(6, "0").slice(0, 6);
+  return BigInt(whole) * 1000n + BigInt(frac);
+}
+
+export function sameVersion(a: string, b: string): boolean {
+  const x = toMicros(a);
+  const y = toMicros(b);
+  return x !== null && x === y;
+}
+
 export type UpdateResult =
   | { ok: true; updated_date: string; changes: number }
   | { ok: false; status: 404 | 409 | 500; error: string };
@@ -76,8 +97,8 @@ export async function updateRecord(
   patch: SanitizedPatch,
   actor: string | null,
   expectedUpdated?: string,
+  db: Db = createServiceClient(),
 ): Promise<UpdateResult> {
-  const db = createServiceClient();
   const orgId = organizationId();
   const { data: current, error: readErr } = await db
     .from("crm_contact")
@@ -89,7 +110,7 @@ export async function updateRecord(
   if (readErr) return { ok: false, status: 500, error: readErr.message };
   if (!current) return { ok: false, status: 404, error: "Record not found" };
   const row = current as unknown as ContactRow & { engagement_history: unknown };
-  if (expectedUpdated && new Date(row.updated_date).getTime() !== new Date(expectedUpdated).getTime()) {
+  if (expectedUpdated && !sameVersion(row.updated_date, expectedUpdated)) {
     return { ok: false, status: 409, error: "This record changed since you opened it. Reload to see the latest." };
   }
 
@@ -110,10 +131,13 @@ export async function updateRecord(
     .eq("id", id)
     .eq("organization_id", orgId)
     .eq("updated_date", row.updated_date)
-    .select("id");
+    .select("id, updated_date");
   if (error) return { ok: false, status: 500, error: error.message };
   if (!saved || saved.length === 0) {
     return { ok: false, status: 409, error: "This record changed while saving. Reload to see the latest." };
   }
-  return { ok: true, updated_date: now, changes: entries.length };
+  // Return the version the DATABASE stored. A BEFORE UPDATE trigger (set_updated_date)
+  // replaces our value with now() at microsecond precision, so `now` above is never the
+  // stored version. Returning it made every next save look stale (false 409s).
+  return { ok: true, updated_date: String((saved[0] as { updated_date: string }).updated_date), changes: entries.length };
 }
