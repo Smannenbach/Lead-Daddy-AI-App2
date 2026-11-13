@@ -174,7 +174,7 @@ describe("timeline", () => {
       { bogus: true },
       null,
     ]);
-    expect(t).toEqual([
+    expect(t.map(({ id, ...rest }) => (expect(id).toMatch(/^t_/), rest))).toEqual([
       { type: "system", at: "2026-10-01T00:00:00Z", by: null, detail: "Sent email: Hello" },
       { type: "note", at: "2026-10-02T00:00:00Z", by: null, detail: "Left voicemail" },
     ]);

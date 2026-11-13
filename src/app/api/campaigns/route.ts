@@ -5,7 +5,7 @@ import { sendSms } from "@/lib/channels/twilio";
 import { sendEmail } from "@/lib/channels/email";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
 import type { SequenceState, SequenceStep } from "@/lib/campaigns/sequences";
-import { previewCampaign } from "@/lib/campaigns/recipients";
+import { previewCampaign, readAudience } from "@/lib/campaigns/recipients";
 import { tooLong } from "@/lib/leads/limits";
 
 interface LaunchBody {
@@ -43,7 +43,7 @@ export async function GET() {
     .limit(100);
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  const campaigns = (data ?? []).map((c) => {
+  const campaigns = (data ?? []).filter((c) => !readAudience(c.target_audience).deletedAt && c.status !== "deleted").map((c) => {
     const ta = (c.target_audience ?? {}) as { leadIds?: string[]; sequence?: SequenceState };
     const seq = ta.sequence ?? { steps: [], launchedAt: null, runs: [] };
     const doneSteps = new Set(

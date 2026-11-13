@@ -96,6 +96,8 @@ export const CORE_FIELDS: ReadonlyArray<FieldDef> = [
 ];
 
 export interface TimelineEntry {
+  /** Stable id for display entries (stored id, or a hash of the entry for older rows). */
+  id?: string;
   type: "created" | "stage_changed" | "field_changed" | "note" | "verified" | "system";
   at: string;
   by: string | null;
@@ -639,6 +641,20 @@ function firstString(o: Record<string, unknown>, keys: string[]): string | null 
   return null;
 }
 
+/** Deterministic id for a stored timeline entry, so notes can be deleted without a schema change. */
+export function timelineEntryId(stored: unknown): string {
+  const o = asObject(stored);
+  if (typeof o.id === "string" && o.id) return o.id;
+  const text = JSON.stringify(o, Object.keys(o).sort());
+  let h1 = 0x811c9dc5;
+  let h2 = 0;
+  for (let i = 0; i < text.length; i++) {
+    h1 = Math.imul(h1 ^ text.charCodeAt(i), 16777619);
+    h2 = (Math.imul(31, h2) + text.charCodeAt(i)) | 0;
+  }
+  return `t_${(h1 >>> 0).toString(16)}${(h2 >>> 0).toString(16)}`;
+}
+
 /**
  * Normalizes stored history for display. Older writers (email/SMS composers, Base44) used
  * other shapes ({ date|timestamp, description|content }); those are shown, not discarded.
@@ -655,7 +671,7 @@ export function readTimeline(stored: unknown): TimelineEntry[] {
     const rawType = typeof o.type === "string" ? o.type : "system";
     const type = (TIMELINE_TYPES.has(rawType) ? rawType : rawType.includes("note") ? "note" : "system") as TimelineEntry["type"];
     const by = firstString(o, ["by", "user", "author", "actor"]);
-    out.push({ type, at, by, detail });
+    out.push({ id: timelineEntryId(o), type, at, by, detail });
   }
   return out;
 }
