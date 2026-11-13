@@ -80,3 +80,18 @@ insert into public.crm_contact (first_name, email, stage) values
   ('Seed4','s4@example.com','New'),('Seed5','s5@example.com','New'),
   ('Seed6','s6@example.com','Contacted'),('Seed7','s7@example.com','Contacted'),('Seed8','s8@example.com','Contacted'),
   ('Base44a',null,'Prospect'),('Base44b',null,'Underwriting'),('Base44c',null,'Closed'),('NoStage',null,null);
+
+-- Other live tables the app writes to (columns captured read-only 2026-11-13).
+create table public.lead_event (
+  id uuid primary key default gen_random_uuid(), unified_lead_id text, event_type text, detail text, data jsonb,
+  created_date timestamptz default now(), updated_date timestamptz default now(), organization_id text
+);
+create table public.unified_lead (
+  id uuid primary key default gen_random_uuid(), source text, provider text, name text, email text, phone text, message text,
+  page_url text, utm jsonb, consent jsonb, status text, idempotency_key text,
+  created_date timestamptz default now(), updated_date timestamptz default now(), deleted_at timestamptz, organization_id text
+);
+create table public.email_verification (
+  id uuid primary key default gen_random_uuid(), email text, verification_status text, verification_source text, verification_date text,
+  created_date timestamptz default now(), updated_date timestamptz default now(), organization_id text
+);
