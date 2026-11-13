@@ -112,3 +112,47 @@ Not written. See TODO 2.
 - Migrations ran only on the local replica. Their effect on the Base44 app wasn't tested.
 - Route tests use a fake database, not PostgREST.
 - Commit 74938fe has a test file type error, fixed two commits later in 413ed1f. The branch tip is clean.
+
+---
+
+# Round 2: outside and inside review (2026-11-13)
+
+Scope: app2 only (leaddaddy.ai is out of scope by owner decision). All on branch `qa-backend-fixes`.
+
+## Security (urgent)
+
+| Item | Status |
+|---|---|
+| Sign ups open on the shared Supabase project, auto confirmed | **Steve.** Dashboard setting. A test login `qa.test.magic@example.com` exists. |
+| A new login can set its own `organization_id` (defaults to Go Buy Leads) and get full access to every tenant table through the public API | Migration `20261113000300_user_cannot_choose_organization.sql` written and tested. **Not applied.** `tests/db/user-org-security.test.ts` shows the hole on a copy of the live rules (2 tests fail without the migration) and that it's closed with it, while admins can still add teammates. |
+| app2 magic link created accounts | Fixed: `shouldCreateUser: false`. Magic link and reset show one neutral message, so the page doesn't reveal which emails have accounts. |
+| app2 sent no safety headers | Fixed: CSP, HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, COOP (`src/lib/security-headers.ts`). Checked on a local build. |
+| auth/callback redirect | Only same-site paths are allowed (`src/lib/auth-helpers/redirect.ts`). |
+
+## Built
+
+| Area | What changed |
+|---|---|
+| Login | LD mark, labels, Forgot password (new `/reset-password`), Show password, correct busy text, policy links, neutral placeholder |
+| 404 | Branded page, real 404 status code, way back |
+| Favicon and titles | LD icon; "Page · Lead Daddy" titles |
+| Privacy and Terms | `/privacy` and `/terms` with marked `[LEGAL TEXT]` placeholders for Steve |
+| /bfcm | Email and phone required (server and page). Consent optional and separate. Thank you text matches the consent box. "Call us" and "We never share your information" removed. Lender name, NMLS ID and disclosure placeholders. Length caps. An unchecked repeat never removes earlier consent. |
+| Whole app | Light slate and indigo, one sidebar (Home, Leads, Pipeline, Campaigns, Import, Scraper, Settings), phone menu. Built from the written descriptions; adjust when the Figma mockups are connected. |
+| Home | Add a lead, Import a CSV and Scrape a page cards, each with its own result. Credits left. |
+| Leads and Pipeline | Consent column, long text cut short, bigger rows, bulk Add tag and Delete, in-app dialogs, server export in your time zone, Esc closes Columns, filters reset on field change, failed edits close and restore |
+| Campaigns | Review and launch shows the copy, the recipients and who's skipped before anything sends. Email only by default. Run next step asks first. Delete. |
+| Lead record | Contact permission card, the form answer, stage progress bar, Verify shows the cost first, Delete, deletable notes, exact times |
+
+## Verified
+
+- 225 unit and route tests, plus 19 database tests on a throwaway local Postgres. All pass.
+- Production build, then every signed-in page clicked through with a fake login at 390px and 1440px: no sideways scroll, no console errors, Review and launch dialog opens and closes with Esc.
+
+## Not done or blocked
+
+- **`/datasets` is on leaddaddy.ai, not app2** (app2 returns 404 for it), so it can't be put behind login from this repo. It needs the leaddaddy.ai repo.
+- Mockups: not used (Figma not connected). The look comes from the written descriptions.
+- Saved views still live in the browser (waiting on the table design decision).
+- Final legal text for Privacy, Terms, /bfcm lender name, NMLS ID and consent wording: Steve.
+- Cleanup: `scripts/qa-cleanup.sql` now covers 10 leads, 1 campaign, 3 form copies and the test login. Not run.
