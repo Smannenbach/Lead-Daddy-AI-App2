@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { consentRecord } from "@/lib/consent";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
@@ -71,7 +72,12 @@ export async function POST(request: Request) {
       phone: body.phone?.trim() || null,
       company: body.company?.trim() || null,
       job_title: body.job_title?.trim() || null,
-      custom_fields: body.tcpaConsent ? { tcpa_consent: "granted" } : {},
+      custom_fields: body.tcpaConsent
+        ? {
+            tcpa_consent: "granted",
+            consent_record: consentRecord({ granted: true, method: "rep_attested", source: "console:add-lead", wordingVersion: "console-add-lead-2026-11", at: now, capturedBy: auth.user.email ?? null }),
+          }
+        : {},
       lead_source: "manual",
       stage: "new",
       engagement_history: [{ type: "created", at: now, by: auth.user.email ?? null, detail: "Lead added manually" }],

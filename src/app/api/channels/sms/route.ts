@@ -6,6 +6,7 @@ import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseWebhook, sendSms } from "@/lib/channels/twilio";
 import { isOptOut } from "@/lib/channels/optout";
+import { revokeConsent } from "@/lib/consent";
 import { validateTwilioSignature } from "@/lib/twilio-signature";
 import { callModelWithFallback, enabledProviders } from "@/lib/ai/providers";
 import { autoSelect } from "@/lib/ai/router";
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
       await db
         .from("crm_contact")
         .update({
-          custom_fields: { ...cf, tcpa_consent: "revoked", opted_out_at: now },
+          custom_fields: { ...cf, tcpa_consent: "revoked", opted_out_at: now, consent_record: revokeConsent(cf.consent_record, now, "sms:STOP") },
           updated_date: now,
         })
         .eq("id", contact.id);

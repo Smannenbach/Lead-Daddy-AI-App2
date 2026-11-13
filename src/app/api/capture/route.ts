@@ -4,6 +4,7 @@
 
 import { validateCapture, captureIdempotencyKey, captureResponse } from "@/lib/capture/validate";
 import { organizationId } from "@/lib/supabase/org";
+import { consentRecord } from "@/lib/consent";
 import { createServiceClient } from "@/lib/supabase/server";
 import { checkRate, clientKey } from "@/lib/ratelimit";
 
@@ -129,7 +130,12 @@ async function mirrorToCrm(
     email: p.email,
     phone: p.phone,
     company: p.company,
-    custom_fields: { tcpa_consent: p.consent ? "granted" : "none", unified_lead_id: unifiedLeadId, crm_fields: finance },
+    custom_fields: {
+      tcpa_consent: p.consent ? "granted" : "none",
+      consent_record: consentRecord({ granted: p.consent, method: "web_form", source: pageUrl ?? "web form", wordingVersion: "bfcm-form-2026-11", at: now }),
+      unified_lead_id: unifiedLeadId,
+      crm_fields: finance,
+    },
     engagement_history: [activity],
     lead_source: "bfcm-landing",
     stage: "new",

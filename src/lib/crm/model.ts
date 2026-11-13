@@ -9,6 +9,8 @@
 //   - tcpa_consent stays in custom_fields.tcpa_consent and is NEVER writable from here
 //     (consent is captured only through the add-lead / capture flows that record it).
 
+import { readConsentRecord, type ConsentRecord } from "@/lib/consent";
+
 export type StageKey = "new" | "contacted" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
 
 export const STAGES: ReadonlyArray<{ key: StageKey; label: string; tone: string }> = [
@@ -117,6 +119,8 @@ export interface CrmRecord {
   email_status: string;
   phone_status: string;
   consent: string;
+  /** How/where/when consent was recorded. null for leads created before consent records existed. */
+  consent_record: ConsentRecord | null;
   custom: Record<string, string>;
   created_date: string;
   updated_date: string;
@@ -194,6 +198,7 @@ export function toRecord(row: ContactRow, emailStatus = "unverified", phoneStatu
     email_status: emailStatus,
     phone_status: phoneStatus,
     consent: typeof cf.tcpa_consent === "string" ? cf.tcpa_consent : "none",
+    consent_record: readConsentRecord(row.custom_fields),
     custom: readCustomFields(row.custom_fields),
     created_date: row.created_date,
     updated_date: row.updated_date,
@@ -407,7 +412,7 @@ export function summarize(records: CrmRecord[], now: Date = new Date()): Summary
 
 // ── Writes: validation + history ───────────────────────────────────────────
 
-const RESERVED_CUSTOM = new Set(["tcpa_consent", "crm_fields", "sms_opt_out"]);
+const RESERVED_CUSTOM = new Set(["tcpa_consent", "crm_fields", "sms_opt_out", "consent_record"]);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type PatchInput = Partial<

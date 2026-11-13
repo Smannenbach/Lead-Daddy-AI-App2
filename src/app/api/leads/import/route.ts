@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { consentRecord } from "@/lib/consent";
 import {
   CSV_LEAD_SOURCE,
   IMPORT_BATCH_SIZE,
@@ -67,7 +68,12 @@ export async function POST(request: Request) {
           phone: r.phone,
           company: r.company,
           job_title: r.job_title,
-          custom_fields: body?.tcpaConsent ? { tcpa_consent: "granted" } : {},
+          custom_fields: body?.tcpaConsent
+            ? {
+                tcpa_consent: "granted",
+                consent_record: consentRecord({ granted: true, method: "rep_attested_import", source: "console:csv-import", wordingVersion: "csv-import-2026-11", at: now, capturedBy: auth.user.email ?? null }),
+              }
+            : {},
           lead_source: CSV_LEAD_SOURCE,
           stage: "new",
           created_date: now,
