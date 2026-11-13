@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/channels/email";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
 import type { SequenceState, SequenceStep } from "@/lib/campaigns/sequences";
 import { previewCampaign } from "@/lib/campaigns/recipients";
+import { tooLong } from "@/lib/leads/limits";
 
 interface LaunchBody {
   name: string;
@@ -88,7 +89,10 @@ export async function POST(request: Request) {
   if ("error" in auth) return auth.error;
 
   const body = (await request.json().catch(() => null)) as LaunchBody | null;
-  if (!body?.name?.trim()) return Response.json({ error: "name is required" }, { status: 400 });
+  if (!body?.name?.trim()) return Response.json({ code: "name_required", error: "Give the campaign a name." }, { status: 400 });
+  if (tooLong("campaign_name", body.name.trim())) {
+    return Response.json({ code: "too_long", error: tooLong("campaign_name", body.name.trim()) }, { status: 400 });
+  }
 
   const now = new Date().toISOString();
   const db = createServiceClient();

@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { consentRecord } from "@/lib/consent";
 import { normalizePhone } from "@/lib/phone";
+import { tooLong } from "@/lib/leads/limits";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
@@ -60,6 +61,10 @@ export async function POST(request: Request) {
     | { first_name?: string; last_name?: string; email?: string; phone?: string; company?: string; job_title?: string; tcpaConsent?: boolean }
     | null;
   if (!body?.first_name?.trim()) return Response.json({ code: "first_name_required", error: "Add a first name." }, { status: 400 });
+  for (const f of ["first_name", "last_name", "company", "job_title", "email"] as const) {
+    const err = tooLong(f, typeof body[f] === "string" ? body[f]!.trim() : null);
+    if (err) return Response.json({ code: "too_long", field: f, error: err }, { status: 400 });
+  }
   const phone = normalizePhone(body.phone);
   if (!phone.ok) return Response.json({ code: "invalid_phone", error: phone.error }, { status: 400 });
 

@@ -11,6 +11,7 @@
 
 import { readConsentRecord, type ConsentRecord } from "@/lib/consent";
 import { normalizePhone } from "@/lib/phone";
+import { LIMITS, tooLong } from "@/lib/leads/limits";
 
 export type StageKey = "new" | "contacted" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
 
@@ -482,7 +483,13 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
     return out;
   }
   const p = input as PatchInput;
-  for (const f of TEXT_FIELDS) if (f in p) out.columns[f] = cleanText(p[f]);
+  for (const f of TEXT_FIELDS) {
+    if (!(f in p)) continue;
+    const v = cleanText(p[f], Number.MAX_SAFE_INTEGER);
+    const err = tooLong(f, v);
+    if (err) out.errors.push(err);
+    else out.columns[f] = v;
+  }
   if ("first_name" in p && !out.columns.first_name) out.errors.push("first_name cannot be empty");
   if ("phone" in p) {
     const ph = normalizePhone(p.phone);
@@ -490,8 +497,9 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
     else out.errors.push(ph.error);
   }
   if ("email" in p) {
-    const e = cleanText(p.email)?.toLowerCase() ?? null;
-    if (e !== null && !EMAIL.test(e)) out.errors.push("email is not valid");
+    const e = cleanText(p.email, Number.MAX_SAFE_INTEGER)?.toLowerCase() ?? null;
+    if (tooLong("email", e)) out.errors.push(tooLong("email", e)!);
+    else if (e !== null && !EMAIL.test(e)) out.errors.push("Enter a valid email address.");
     else out.columns.email = e;
   }
   if ("stage" in p) {
@@ -512,8 +520,10 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
   if ("tags" in p) {
     const raw = Array.isArray(p.tags) ? p.tags : typeof p.tags === "string" ? p.tags.split(",") : [];
     out.columns.tags = [
-      ...new Set(raw.filter((t): t is string => typeof t === "string").map((t) => t.trim().slice(0, 40)).filter(Boolean)),
-    ].slice(0, 25);
+      ...new Set(raw.filter((t): t is string => typeof t === "string").map((t) => t.trim()).filter(Boolean)),
+    ];
+    if (out.columns.tags.some((t) => tooLong("tag", t))) out.errors.push(tooLong("tag", "x".repeat(LIMITS.tag + 1))!);
+    if (out.columns.tags.length > 25) out.errors.push("A lead can have up to 25 tags.");
   }
   if ("next_follow_up" in p) {
     const d = cleanText(p.next_follow_up, 40);
@@ -528,12 +538,15 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
         out.errors.push(`custom field '${k}' is not allowed`);
         continue;
       }
-      out.custom[k] = cleanText(v, 500);
+      const cv = cleanText(v, Number.MAX_SAFE_INTEGER);
+      if (tooLong("custom_value", cv)) out.errors.push(tooLong("custom_value", cv)!);
+      else out.custom[k] = cv;
     }
   }
   if ("note" in p) {
-    const n = cleanText(p.note, 4000);
-    if (n) out.note = n;
+    const n = cleanText(p.note, Number.MAX_SAFE_INTEGER);
+    if (tooLong("note", n)) out.errors.push(tooLong("note", n)!);
+    else if (n) out.note = n;
   }
   return out;
 }

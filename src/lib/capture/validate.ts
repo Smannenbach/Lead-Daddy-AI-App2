@@ -1,5 +1,6 @@
 // Pure validation for the public lead-capture endpoint. No network, no IO.
 import { normalizePhone } from "@/lib/phone";
+import { LIMITS, tooLong } from "@/lib/leads/limits";
 
 export interface CaptureInput {
   name?: unknown;
@@ -24,17 +25,21 @@ export type CaptureError =
   | "honeypot"
   | "missing_contact"
   | "bad_email"
-  | "bad_phone";
+  | "bad_phone"
+  | "too_long";
 
 export function validateCapture(input: CaptureInput): { ok: true; value: CapturePayload } | { ok: false; error: CaptureError } {
   if (typeof input.website === "string" && input.website.trim() !== "") {
     return { ok: false, error: "honeypot" };
   }
-  const name = typeof input.name === "string" ? input.name.trim().slice(0, 200) : "";
-  const email = typeof input.email === "string" ? input.email.trim().toLowerCase().slice(0, 320) : "";
-  const phone = typeof input.phone === "string" ? input.phone.trim().slice(0, 40) : "";
-  const message = typeof input.message === "string" ? input.message.trim().slice(0, 2000) : "";
-  const company = typeof input.company === "string" ? input.company.trim().slice(0, 200) : "";
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+  const phone = typeof input.phone === "string" ? input.phone.trim() : "";
+  const message = typeof input.message === "string" ? input.message.trim() : "";
+  const company = typeof input.company === "string" ? input.company.trim() : "";
+  if (name.length > LIMITS.first_name + LIMITS.last_name || tooLong("email", email) || phone.length > 40 || tooLong("financing_need", message) || tooLong("company", company)) {
+    return { ok: false, error: "too_long" };
+  }
 
   if (!email && !phone) return { ok: false, error: "missing_contact" };
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "bad_email" };

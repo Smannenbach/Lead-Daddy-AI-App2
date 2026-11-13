@@ -3,6 +3,7 @@
 // route supplies the set of emails that already exist in crm_contact.
 
 import { normalizePhone } from "@/lib/phone";
+import { tooLong } from "@/lib/leads/limits";
 
 export const MAX_IMPORT_ROWS = 500;
 export const IMPORT_BATCH_SIZE = 100;
@@ -65,6 +66,13 @@ export function validateImportRows(
     const email = normalizeEmail(r.email) || null;
     if (!firstName && !email) {
       skippedRows.push({ row: rowNumber, reason: "Missing a first name and an email" });
+      return;
+    }
+    const long = (["first_name", "last_name", "email", "company", "job_title"] as const)
+      .map((f) => tooLong(f, f === "email" ? email : asTrimmedString(r[f])))
+      .find(Boolean);
+    if (long) {
+      skippedRows.push({ row: rowNumber, reason: long });
       return;
     }
     const phone = normalizePhone(asTrimmedString(r.phone));
