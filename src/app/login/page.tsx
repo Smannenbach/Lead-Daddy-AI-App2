@@ -3,32 +3,42 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { LegalLinks, Logo, PublicShell } from "@/components/brand/Brand";
+
+type Mode = "password" | "magic" | "reset";
+
+// One neutral message for magic links and resets, so the page never reveals
+// whether an email has a Lead Daddy account.
+const LINK_SENT = "If that email has a Lead Daddy account, a link is on its way. Check your inbox.";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"password" | "magic">("password");
+  const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState(() =>
     typeof window !== "undefined" && new URLSearchParams(window.location.search).get("error")
-      ? "Sign-in failed. Try again."
+      ? "That link didn't work or has expired. Try again."
       : "",
   );
+
+  function switchMode(m: Mode) {
+    setMode(m);
+    setError("");
+    setSent(false);
+  }
 
   async function signInWithPassword(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-    });
+    const { error } = await createClient().auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     setBusy(false);
     if (error) {
-      setError(error.message);
+      setError("That email and password don't match. Try again or reset your password.");
       return;
     }
     router.push("/");
@@ -39,64 +49,129 @@ export default function LoginPage() {
     e.preventDefault();
     setBusy(true);
     setError("");
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
+    // shouldCreateUser: false. The login page never creates accounts. Unknown emails
+    // get the same message as known ones.
+    await createClient().auth.signInWithOtp({
       email: email.trim().toLowerCase(),
-      options: { emailRedirectTo: `${location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${location.origin}/auth/callback`, shouldCreateUser: false },
     });
     setBusy(false);
-    if (error) setError(error.message);
-    else setSent(true);
+    setSent(true);
   }
 
+  async function sendReset(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    await createClient().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: `${location.origin}/auth/callback?next=/reset-password`,
+    });
+    setBusy(false);
+    setSent(true);
+  }
+
+  const submit = mode === "password" ? signInWithPassword : mode === "magic" ? sendMagicLink : sendReset;
+  const label = busy
+    ? mode === "password" ? "Signing in…" : "Sending link…"
+    : mode === "password" ? "Sign in" : mode === "magic" ? "Email me a sign in link" : "Email me a reset link";
+  const inputCls =
+    "w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
+
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-sm space-y-6 rounded-2xl border border-neutral-800 bg-neutral-950 p-8">
-        <div>
-          <h1 className="text-2xl font-semibold">LeadDaddy.ai</h1>
-          <p className="mt-1 text-sm text-neutral-400">AI-first outbound. Sign in with your team credentials.</p>
-        </div>
+    <PublicShell>
+      <main className="flex flex-1 items-center justify-center px-4 py-12">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 flex justify-center">
+            <Logo />
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h1 className="text-xl font-semibold">{mode === "reset" ? "Reset your password" : "Sign in"}</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {mode === "reset" ? "We'll email you a link to set a new password." : "Use your team email to get into Lead Daddy."}
+            </p>
 
-        <div className="flex rounded-lg border border-neutral-800 p-1 text-xs">
-          {(["password", "magic"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => { setMode(m); setError(""); setSent(false); }}
-              className={`flex-1 rounded-md px-3 py-1.5 ${mode === m ? "bg-neutral-800 text-white" : "text-neutral-400 hover:text-neutral-200"}`}
-            >
-              {m === "password" ? "Password" : "Magic link"}
-            </button>
-          ))}
-        </div>
-
-        {sent ? (
-          <p className="rounded-lg bg-emerald-950 px-4 py-3 text-sm text-emerald-300">Check your inbox for the magic link.</p>
-        ) : (
-          <form onSubmit={mode === "password" ? signInWithPassword : sendMagicLink} className="space-y-4">
-            <input
-              type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com" autoComplete="email"
-              className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2.5 text-sm outline-none focus:border-neutral-500"
-            />
-            {mode === "password" && (
-              <input
-                type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password" autoComplete="current-password"
-                className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2.5 text-sm outline-none focus:border-neutral-500"
-              />
+            {mode !== "reset" && (
+              <div className="mt-6 flex rounded-lg bg-slate-100 p-1 text-sm" role="tablist" aria-label="Sign in method">
+                {(["password", "magic"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="tab"
+                    aria-selected={mode === m}
+                    onClick={() => switchMode(m)}
+                    className={`flex-1 rounded-md px-3 py-1.5 font-medium ${mode === m ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    {m === "password" ? "Password" : "Email link"}
+                  </button>
+                ))}
+              </div>
             )}
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-full rounded-lg bg-neutral-100 px-4 py-2.5 text-sm font-medium text-neutral-900 hover:bg-white disabled:opacity-50"
-            >
-              {busy ? "Signing in…" : mode === "password" ? "Sign in" : "Email me a magic link"}
-            </button>
-            {error && <p className="text-sm text-red-400">{error}</p>}
-          </form>
-        )}
-      </div>
-    </main>
+
+            {sent ? (
+              <div className="mt-6 space-y-4">
+                <p className="rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-800" role="status">{LINK_SENT}</p>
+                <button type="button" onClick={() => switchMode("password")} className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                  Back to sign in
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={submit} className="mt-6 space-y-4">
+                <div>
+                  <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
+                  <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" className={inputCls} />
+                </div>
+                {mode === "password" && (
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label htmlFor="password" className="block text-sm font-medium text-slate-700">Password</label>
+                      <button type="button" onClick={() => switchMode("reset")} className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                        Forgot password?
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="current-password"
+                        className={`${inputCls} pr-16`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-pressed={showPassword}
+                        aria-controls="password"
+                        className="absolute inset-y-0 right-0 px-3 text-xs font-medium text-slate-500 hover:text-slate-800"
+                      >
+                        {showPassword ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {label}
+                </button>
+                {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+                {mode === "reset" && (
+                  <button type="button" onClick={() => switchMode("password")} className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                    Back to sign in
+                  </button>
+                )}
+              </form>
+            )}
+          </div>
+          <p className="mt-6 text-center text-xs text-slate-500">
+            Need access? Ask your Lead Daddy admin to add you.
+          </p>
+          <LegalLinks className="mt-3" />
+        </div>
+      </main>
+    </PublicShell>
   );
 }

@@ -95,3 +95,75 @@ create table public.email_verification (
   id uuid primary key default gen_random_uuid(), email text, verification_status text, verification_source text, verification_date text,
   created_date timestamptz default now(), updated_date timestamptz default now(), organization_id text
 );
+
+-- ── Auth + tenancy model (captured read-only 2026-11-13) ─────────────────────
+-- Local stand-ins for Supabase's auth.uid() and API roles. A test "logs in" with:
+--   set role authenticated; set request.jwt.claim.sub = '<uuid>';
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+end $$;
+create schema if not exists auth;
+create or replace function auth.uid() returns uuid language sql stable as $$
+  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+$$;
+grant usage on schema auth to authenticated, anon;
+
+create table public."user" (
+  id uuid primary key,
+  organization_id text default coalesce(current_user_org_id(), 'e5eef388-09e1-4fd4-9e93-19121d60125b'::text),
+  role text,
+  created_date timestamptz not null default now(),
+  updated_date timestamptz not null default now()
+);
+create table public.organization (
+  id uuid primary key default gen_random_uuid(), name text, owner_id text, parent_organization_id text,
+  created_date timestamptz not null default now(), updated_date timestamptz not null default now(),
+  settings jsonb not null default '{}'::jsonb
+);
+
+create schema if not exists private_security;
+create or replace function private_security.current_user_org_id() returns text
+language sql stable security definer set search_path to 'public', 'pg_temp' as $$
+  select organization_id from public."user" where id = (select auth.uid()) limit 1;
+$$;
+create or replace function private_security.is_super_admin() returns boolean
+language sql stable security definer set search_path to 'public', 'pg_temp' as $$
+  select exists (select 1 from public."user" where id = (select auth.uid()) and role = 'super_admin');
+$$;
+create or replace function public.current_user_org_id() returns text
+language sql stable set search_path to 'public', 'private_security', 'pg_temp' as $$ select private_security.current_user_org_id(); $$;
+create or replace function public.is_super_admin() returns boolean
+language sql stable set search_path to 'public', 'private_security', 'pg_temp' as $$ select private_security.is_super_admin(); $$;
+grant usage on schema private_security to authenticated, anon;
+
+alter table public."user" enable row level security;
+alter table public.organization enable row level security;
+alter table public.crm_contact enable row level security;
+
+create policy user_insert_self_or_admin on public."user" for insert to authenticated
+  with check (((id = (select auth.uid())) and (coalesce(role, 'user') = 'user')) or is_super_admin());
+create policy user_select_self_or_org on public."user" for select to authenticated
+  using ((id = (select auth.uid())) or (organization_id = current_user_org_id()) or is_super_admin());
+create policy user_update_self_or_admin on public."user" for update to authenticated
+  using ((id = (select auth.uid())) or is_super_admin())
+  with check (((id = (select auth.uid())) and (coalesce(role, 'user') = coalesce((select u.role from "user" u where u.id = (select auth.uid())), 'user'))) or is_super_admin());
+create policy user_delete_super_admin on public."user" for delete to authenticated using (is_super_admin());
+
+create policy organization_insert_owner_or_admin on public.organization for insert to authenticated
+  with check ((owner_id = ((select auth.uid()))::text) or is_super_admin());
+create policy organization_select_tenant on public.organization for select to authenticated
+  using (((id)::text = current_user_org_id()) or (owner_id = ((select auth.uid()))::text) or (parent_organization_id = current_user_org_id()) or is_super_admin());
+create policy organization_update_owner_or_admin on public.organization for update to authenticated
+  using ((owner_id = ((select auth.uid()))::text) or is_super_admin())
+  with check ((owner_id = ((select auth.uid()))::text) or is_super_admin());
+
+create policy tenant_isolation_policy on public.crm_contact for all to authenticated
+  using ((organization_id = current_user_org_id()) or (exists (select 1 from organization o where (((o.id)::text = crm_contact.organization_id) and (o.owner_id = ((select auth.uid()))::text)))) or is_super_admin());
+
+grant select, insert, update, delete on public."user", public.organization, public.crm_contact to authenticated;
+grant insert on public."user" to anon;
+
+-- The live org and one existing super admin member.
+insert into public.organization (id, name, owner_id) values ('e5eef388-09e1-4fd4-9e93-19121d60125b', 'Go Buy Leads LLC', '00000000-0000-0000-0000-00000000a001');
+insert into public."user" (id, organization_id, role) values ('00000000-0000-0000-0000-00000000a001', 'e5eef388-09e1-4fd4-9e93-19121d60125b', 'super_admin');
