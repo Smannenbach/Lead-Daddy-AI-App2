@@ -24,9 +24,9 @@ type AuthResult = { user: User } | { error: Response };
 export async function requireUser(): Promise<AuthResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: Response.json({ error: "Unauthorized" }, { status: 401 }) };
+  if (!user) return { error: Response.json({ code: "unauthorized", error: "Your session has expired. Sign in again." }, { status: 401 }) };
   if (!isAllowedEmail(user.email)) {
-    return { error: Response.json({ error: "Forbidden" }, { status: 403 }) };
+    return { error: Response.json({ code: "forbidden", error: "This account doesn't have access to Lead Daddy yet. Ask an admin to add it." }, { status: 403 }) };
   }
   return { user };
 }

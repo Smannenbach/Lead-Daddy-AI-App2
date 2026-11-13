@@ -1,3 +1,4 @@
+import { serverError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
 import { consentRecord } from "@/lib/consent";
 import { normalizePhone } from "@/lib/phone";
@@ -22,7 +23,7 @@ export async function GET() {
     .is("deleted_at", null)
     .order("created_date", { ascending: false })
     .limit(200);
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("leads GET", error.message);
 
   const contacts = data ?? [];
   const [emailStatus, phoneStatus] = await Promise.all([
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
     })
     .select("id")
     .single();
-  if (error || !data) return Response.json({ error: error?.message ?? "insert failed" }, { status: 500 });
+  if (error || !data) return serverError("leads POST", error?.message ?? "insert failed");
 
   return Response.json({ id: data.id }, { status: 201 });
 }

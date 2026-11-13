@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api/errors";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 import { organizationId } from "@/lib/supabase/org";
@@ -31,13 +32,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .eq("id", id)
     .eq("organization_id", organizationId())
     .single();
-  if (!campaign) return Response.json({ error: "Campaign not found" }, { status: 404 });
-  if (campaign.status !== "live") return Response.json({ error: "Campaign is not live" }, { status: 409 });
+  if (!campaign) return apiError("not_found", "Campaign not found.", 404);
+  if (campaign.status !== "live") return apiError("not_live", "This campaign isn't running. Launch it first.", 409);
 
   const ta = (campaign.target_audience ?? {}) as TargetAudience;
   const state: SequenceState = ta.sequence ?? { steps: [], launchedAt: null, runs: [] };
   const leadIds = ta.leadIds ?? [];
-  if (leadIds.length === 0) return Response.json({ error: "No recipients" }, { status: 400 });
+  if (leadIds.length === 0) return apiError("no_recipients", "This campaign has no recipients.", 400);
 
   const stepIndex = nextDueStep(state, new Date());
   if (stepIndex === null) return Response.json({ advanced: false, reason: "no due step" });

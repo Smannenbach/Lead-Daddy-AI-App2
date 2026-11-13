@@ -2,11 +2,19 @@
 // guarded by honeypot + shape validation + idempotent upsert into unified_lead,
 // mirrored to crm_contact for the outreach pipeline.
 
+import { apiError } from "@/lib/api/errors";
 import { validateCapture, captureIdempotencyKey, captureResponse } from "@/lib/capture/validate";
 import { organizationId } from "@/lib/supabase/org";
 import { consentRecord } from "@/lib/consent";
 import { createServiceClient } from "@/lib/supabase/server";
 import { checkRate, clientKey } from "@/lib/ratelimit";
+
+const CAPTURE_MESSAGES: Record<string, string> = {
+  missing_contact: "Add an email or phone number so we can reach you.",
+  bad_email: "Check your email address.",
+  bad_phone: "Check your phone number.",
+  too_long: "One of your answers is too long. Shorten it and try again.",
+};
 
 const CAPTURE_LIMIT = 10; // submissions per IP per window
 const CAPTURE_WINDOW_MS = 10 * 60 * 1000;
@@ -15,19 +23,19 @@ export async function POST(request: Request) {
   const rate = checkRate(`capture:${clientKey(request)}`, Date.now(), CAPTURE_LIMIT, CAPTURE_WINDOW_MS);
   if (!rate.allowed) {
     return Response.json(
-      { error: "too_many_requests" },
+      { code: "too_many_requests", error: "Too many tries. Wait a few minutes and try again." },
       { status: 429, headers: { "Retry-After": String(rate.retryAfterSeconds) } },
     );
   }
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body) return Response.json({ error: "invalid" }, { status: 400 });
+  if (!body) return apiError("invalid_request", "Something was wrong with that form. Try again.", 400);
 
   const v = validateCapture(body);
   if (!v.ok) {
     // Honeypots get a polite fake-success so bots learn nothing.
     if (v.error === "honeypot") return Response.json({ ok: true }, { status: 200 });
-    return Response.json({ error: v.error }, { status: 400 });
+    return apiError(v.error, CAPTURE_MESSAGES[v.error] ?? "Check the form and try again.", 400);
   }
   const p = v.value;
   const key = captureIdempotencyKey(p.email, p.phone);

@@ -1,3 +1,4 @@
+import { apiError, serverError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -41,7 +42,7 @@ export async function GET() {
     .eq("organization_id", organizationId())
     .order("created_date", { ascending: false })
     .limit(100);
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("campaigns GET", error.message);
 
   const campaigns = (data ?? []).filter((c) => !readAudience(c.target_audience).deletedAt && c.status !== "deleted").map((c) => {
     const ta = (c.target_audience ?? {}) as { leadIds?: string[]; sequence?: SequenceState };
@@ -100,7 +101,10 @@ export async function POST(request: Request) {
   let steps = body.steps ?? [];
   if (steps.length === 0 && body.generateCopy) {
     const generated = await generateCampaignSteps(body.name.trim(), body.brief ?? "", asStringArray(body.channelSeq).length > 0 ? asStringArray(body.channelSeq) as ("email" | "sms" | "call")[] : [...DEFAULT_CHANNELS]);
-    if ("error" in generated) return Response.json({ error: generated.error }, { status: 502 });
+    if ("error" in generated) {
+      console.error("[campaigns] copy generation failed", generated.error);
+      return apiError("copy_failed", "The AI couldn't write the copy just now. Try again, or add the messages yourself.", 502);
+    }
     steps = generated.steps;
   }
 
@@ -120,7 +124,7 @@ export async function POST(request: Request) {
     })
     .select("id")
     .single();
-  if (error || !campaign) return Response.json({ error: error?.message ?? "create failed" }, { status: 500 });
+  if (error || !campaign) return serverError("campaigns POST", error?.message ?? "create failed");
 
   return Response.json({ id: campaign.id, status: "draft" }, { status: 201 });
 }
@@ -194,7 +198,7 @@ export async function PATCH(request: Request) {
 
   const body = (await request.json().catch(() => null)) as { campaignId?: string; action?: "launch"; acknowledgeSkips?: boolean } | null;
   if (body?.action !== "launch" || !body.campaignId) {
-    return Response.json({ error: "action=launch and campaignId are required" }, { status: 400 });
+    return apiError("invalid_request", "Pick a campaign to launch.", 400);
   }
 
   const db = createServiceClient();
@@ -205,7 +209,7 @@ export async function PATCH(request: Request) {
     .eq("id", body.campaignId)
     .eq("organization_id", orgId)
     .single();
-  if (!campaign) return Response.json({ error: "Campaign not found" }, { status: 404 });
+  if (!campaign) return apiError("not_found", "Campaign not found.", 404);
   if (campaign.status === "live") {
     return Response.json({ id: campaign.id, status: "live" }); // idempotent relaunch
   }
@@ -213,7 +217,7 @@ export async function PATCH(request: Request) {
   const audience = (campaign.target_audience ?? {}) as TargetAudience;
   const leadIds = asStringArray(audience.leadIds);
   if (leadIds.length === 0) {
-    return Response.json({ error: "Add recipients before launching" }, { status: 400 });
+    return apiError("no_recipients", "Add recipients before launching.", 400);
   }
 
   const { data: contacts } = await db
@@ -226,7 +230,7 @@ export async function PATCH(request: Request) {
   if (found.length < leadIds.length) {
     const foundIds = new Set(found.map((c) => c.id));
     return Response.json(
-      { error: "Some recipients no longer exist", missingLeadIds: leadIds.filter((id) => !foundIds.has(id)) },
+      { code: "recipients_missing", error: "Some recipients were deleted. Remove them from the campaign and try again.", missingLeadIds: leadIds.filter((id) => !foundIds.has(id)) },
       { status: 409 },
     );
   }
@@ -247,7 +251,7 @@ export async function PATCH(request: Request) {
   }
   if (missing.length > 0) {
     return Response.json(
-      { error: `${missing.length} lead(s) lack a valid ${firstChannel === "email" ? "email" : "phone"} verification; verify before launch`, missingLeadIds: missing },
+      { code: "unverified_recipients", error: `${missing.length} recipient(s) need a verified ${firstChannel === "email" ? "email" : "phone number"} first. Verify them, then launch.`, missingLeadIds: missing },
       { status: 409 },
     );
   }
@@ -288,7 +292,7 @@ export async function PATCH(request: Request) {
     firstChannel,
   });
 
-  return Response.json({ id: campaign.id, status: "live", recipients: leadIds.length });
+  return Response.json({ id: campaign.id, name: campaign.name, status: "live", recipients: leadIds.length, message: `${campaign.name ?? "Campaign"} launched to ${leadIds.length} recipient(s).` });
 }
 
 // Direct one-off send to ONE existing lead. The address always comes from the lead

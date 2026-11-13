@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
 import { sanitizePatch } from "@/lib/crm/model";
 import { updateRecord } from "@/lib/crm/server";
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
   const picked = Object.fromEntries(Object.entries(raw).filter(([k]) => allowed.includes(k)));
   if (Object.keys(picked).length === 0) return Response.json({ code: "nothing_to_change", error: "Pick a stage, tags, owner or follow up date to change." }, { status: 400 });
   const patch = sanitizePatch(picked);
-  if (patch.errors.length > 0) return Response.json({ errors: patch.errors }, { status: 400 });
+  if (patch.errors.length > 0) return apiError("invalid_fields", patch.errors.join(" "), 400, { errors: patch.errors });
 
   let updated = 0;
   const failed: Array<{ id: string; error: string }> = [];

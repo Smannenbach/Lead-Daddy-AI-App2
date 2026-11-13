@@ -1,3 +1,4 @@
+import { apiError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
 import { consentRecord } from "@/lib/consent";
 import { csvToLeadRows } from "@/lib/leads/csv";
@@ -92,7 +93,10 @@ export async function POST(request: Request) {
         })),
       )
       .select("id");
-    if (error) return Response.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error("[import] insert failed", error.message);
+      return apiError("server_error", `Saved ${created} lead(s), then something went wrong. Check the list before importing again.`, 500, { created });
+    }
     created += data?.length ?? 0;
   }
 

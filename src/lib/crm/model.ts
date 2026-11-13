@@ -510,7 +510,7 @@ function cleanNumber(v: unknown, min: number, max: number): number | null | "inv
 export function sanitizePatch(input: unknown): SanitizedPatch {
   const out: SanitizedPatch = { columns: {}, custom: {}, note: null, errors: [] };
   if (!input || typeof input !== "object" || Array.isArray(input)) {
-    out.errors.push("body must be an object");
+    out.errors.push("Nothing to save.");
     return out;
   }
   const p = input as PatchInput;
@@ -521,7 +521,7 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
     if (err) out.errors.push(err);
     else out.columns[f] = v;
   }
-  if ("first_name" in p && !out.columns.first_name) out.errors.push("first_name cannot be empty");
+  if ("first_name" in p && !out.columns.first_name && !out.errors.some((e) => e.startsWith("First name"))) out.errors.push("First name can't be empty.");
   if ("phone" in p) {
     const ph = normalizePhone(p.phone);
     if (ph.ok) out.columns.phone = ph.value;
@@ -536,16 +536,16 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
   if ("stage" in p) {
     const s = typeof p.stage === "string" ? p.stage.trim().toLowerCase() : "";
     if (isStage(s)) out.columns.stage = s;
-    else out.errors.push(`stage must be one of ${STAGES.map((x) => x.key).join(", ")}`);
+    else out.errors.push(`Pick a stage: ${STAGES.map((x) => x.label).join(", ")}.`);
   }
   if ("lead_score" in p) {
     const n = cleanNumber(p.lead_score, 0, 100);
-    if (n === "invalid") out.errors.push("lead_score must be 0–100");
+    if (n === "invalid") out.errors.push("Score must be a number from 0 to 100.");
     else out.columns.lead_score = n;
   }
   if ("estimated_value" in p) {
     const n = cleanNumber(p.estimated_value, 0, 1e12);
-    if (n === "invalid") out.errors.push("estimated_value must be a positive number");
+    if (n === "invalid") out.errors.push("Estimated value must be a dollar amount of 0 or more.");
     else out.columns.estimated_value = n;
   }
   if ("tags" in p) {
@@ -558,12 +558,12 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
   }
   if ("next_follow_up" in p) {
     const d = cleanText(p.next_follow_up, 40);
-    if (d !== null && Number.isNaN(Date.parse(d))) out.errors.push("next_follow_up must be a date");
+    if (d !== null && Number.isNaN(Date.parse(d))) out.errors.push("Follow up date must be a real date.");
     else out.columns.next_follow_up = d;
   }
   if ("custom" in p) {
     const entries = Object.entries(asObject(p.custom));
-    if (entries.length > 50) out.errors.push("too many custom fields in one update");
+    if (entries.length > 50) out.errors.push("Change up to 50 custom fields at a time.");
     for (const [k, v] of entries.slice(0, 50)) {
       if (!CUSTOM_KEY.test(k) || RESERVED_CUSTOM.has(k)) {
         out.errors.push(`"${k}" isn't a valid field name. Use letters, numbers or underscores, starting with a letter.`);

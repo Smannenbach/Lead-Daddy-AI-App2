@@ -1,3 +1,4 @@
+import { apiError, serverError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -13,7 +14,7 @@ export async function GET() {
     }
     return Response.json({ connections: out });
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "composio error" }, { status: 502 });
+    return serverError("social GET", err, 502, "We couldn't load your connected social accounts. Try again in a minute.");
   }
 }
 
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     content?: string;
   } | null;
   if (!body?.network || !body.connectedAccountId || !body.content?.trim()) {
-    return Response.json({ error: "network, connectedAccountId and content are required" }, { status: 400 });
+    return apiError("invalid_request", "Pick an account and write a post first.", 400);
   }
   try {
     const result = await postToSocial({
@@ -47,6 +48,6 @@ export async function POST(request: Request) {
     if (error) console.error("lead_event insert failed", error.message);
     return Response.json({ ok: true, result });
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "post failed" }, { status: 502 });
+    return serverError("social POST", err, 502, "That post didn't go out. Try again in a minute.");
   }
 }

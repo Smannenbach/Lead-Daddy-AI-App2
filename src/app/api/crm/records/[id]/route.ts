@@ -1,3 +1,4 @@
+import { apiError, serverError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
 import { sanitizePatch } from "@/lib/crm/model";
 import { getRecord, updateRecord } from "@/lib/crm/server";
@@ -10,9 +11,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
   const { id } = await params;
-  if (!UUID.test(id)) return Response.json({ error: "Record not found" }, { status: 404 });
+  if (!UUID.test(id)) return apiError("not_found", "Lead not found.", 404);
   const found = await getRecord(id);
-  if (!found) return Response.json({ error: "Record not found" }, { status: 404 });
+  if (!found) return apiError("not_found", "Lead not found.", 404);
   return Response.json(found);
 }
 
@@ -23,13 +24,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
   const { id } = await params;
-  if (!UUID.test(id)) return Response.json({ error: "Record not found" }, { status: 404 });
+  if (!UUID.test(id)) return apiError("not_found", "Lead not found.", 404);
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const patch = sanitizePatch(body);
-  if (patch.errors.length > 0) return Response.json({ errors: patch.errors }, { status: 400 });
+  if (patch.errors.length > 0) return apiError("invalid_fields", patch.errors.join(" "), 400, { errors: patch.errors });
   const expected = typeof body?.expectedUpdated === "string" ? body.expectedUpdated : undefined;
   const result = await updateRecord(id, patch, auth.user.email ?? null, expected);
-  if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
+  if (!result.ok) {
+    if (result.status === 500) return serverError("crm PATCH", result.error);
+    return apiError(result.status === 404 ? "not_found" : "version_conflict", result.error, result.status);
+  }
   return Response.json(result);
 }
 

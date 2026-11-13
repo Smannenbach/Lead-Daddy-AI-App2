@@ -1,3 +1,4 @@
+import { serverError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
 import { listRecords } from "@/lib/crm/server";
 
@@ -9,6 +10,6 @@ export async function GET() {
   try {
     return Response.json(await listRecords());
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : "load failed" }, { status: 500 });
+    return serverError("crm GET", e);
   }
 }

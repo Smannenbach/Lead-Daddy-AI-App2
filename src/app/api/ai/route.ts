@@ -1,3 +1,4 @@
+import { apiError, serverError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
 import { callModelWithFallback, enabledProviders, type ChatMessage } from "@/lib/ai/providers";
 import { autoSelect } from "@/lib/ai/router";
@@ -17,23 +18,25 @@ export async function POST(request: Request) {
   if ("error" in auth) return auth.error;
 
   const body = (await request.json().catch(() => null)) as AiRequest | null;
-  if (!body?.prompt?.trim()) return Response.json({ error: "prompt is required" }, { status: 400 });
+  if (!body?.prompt?.trim()) return apiError("prompt_required", "Type a prompt first.", 400);
 
   try {
     await assertAiBudget();
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "budget" }, { status: 429 });
+    console.error("[ai] budget", err instanceof Error ? err.message : err);
+    return apiError("ai_budget_reached", "This month's AI budget is used up. An admin can raise it.", 429);
   }
 
   let decision;
   try {
     decision = autoSelect(body.prompt, body.agent);
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "no providers" }, { status: 400 });
+    console.error("[ai] no provider", err instanceof Error ? err.message : err);
+    return apiError("ai_unavailable", "AI isn't available right now. Try again in a minute.", 503);
   }
   if (body.model) {
     const forced = (await import("@/lib/ai/providers")).enabledProviders().find((p) => p.key === body.model);
-    if (!forced) return Response.json({ error: `Provider '${body.model}' not configured` }, { status: 400 });
+    if (!forced) return apiError("model_unavailable", "That AI model isn't available. Leave it on automatic.", 400);
     decision = { ...decision, provider: forced, reason: `${decision.reason}; forced to ${forced.label}` };
   }
 
@@ -48,7 +51,7 @@ export async function POST(request: Request) {
   try {
     result = await callModelWithFallback(decision.provider, messages, enabledProviders());
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "model call failed" }, { status: 502 });
+    return serverError("ai POST", err, 502, "The AI didn't answer. Try again in a minute.");
   }
 
   await logAiRun({
