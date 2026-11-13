@@ -27,10 +27,28 @@ export function isStage(value: unknown): value is StageKey {
   return typeof value === "string" && STAGE_KEYS.has(value);
 }
 
-/** Unknown/legacy stage values are shown in the "new" column rather than disappearing. */
+/**
+ * crm_contact is shared with the Base44 app, whose pipeline uses mortgage stages.
+ * Those rows are shown in the nearest app2 column instead of all landing in "new".
+ * The stored value is never rewritten unless a user moves the lead.
+ */
+export const BASE44_STAGE_MAP: Readonly<Record<string, StageKey>> = {
+  lead: "new",
+  nurture: "contacted",
+  prospect: "qualified",
+  application: "proposal",
+  opportunity: "proposal",
+  underwriting: "negotiation",
+  approved: "negotiation",
+  closed: "won",
+  customer: "won",
+};
+
+/** Unknown stage values are shown in the "new" column rather than disappearing. */
 export function normalizeStage(value: unknown): StageKey {
   const v = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return isStage(v) ? v : "new";
+  if (isStage(v)) return v;
+  return BASE44_STAGE_MAP[v] ?? "new";
 }
 
 export type FieldType =

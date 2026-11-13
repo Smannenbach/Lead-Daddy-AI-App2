@@ -191,3 +191,19 @@ describe("customFieldKeys + toCsv", () => {
     expect(lines[2].startsWith(`"'=HYPERLINK(""x"")`)).toBe(true);
   });
 });
+
+describe("normalizeStage (shared Base44 table)", () => {
+  it("reads the capitalized values the database stores", async () => {
+    const { normalizeStage } = await import("@/lib/crm/model");
+    expect(normalizeStage("Qualified")).toBe("qualified");
+    expect(normalizeStage("Won")).toBe("won");
+  });
+  it("shows Base44 mortgage stages in the nearest column instead of New", async () => {
+    const { normalizeStage } = await import("@/lib/crm/model");
+    expect(normalizeStage("Prospect")).toBe("qualified");
+    expect(normalizeStage("Underwriting")).toBe("negotiation");
+    expect(normalizeStage("Closed")).toBe("won");
+    expect(normalizeStage("Nurture")).toBe("contacted");
+    expect(normalizeStage("Bogus")).toBe("new");
+  });
+});
