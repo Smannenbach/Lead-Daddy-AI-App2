@@ -124,6 +124,8 @@ export interface CrmRecord {
   /** How/where/when consent was recorded. null for leads created before consent records existed. */
   consent_record: ConsentRecord | null;
   custom: Record<string, string>;
+  /** Display names for custom fields, keyed like `custom`. Missing = derived from the key. */
+  custom_labels: Record<string, string>;
   created_date: string;
   updated_date: string;
 }
@@ -153,6 +155,22 @@ export function readCustomFields(customFields: unknown): Record<string, string> 
     if (CUSTOM_KEY.test(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean")) out[k] = String(v);
   }
   return out;
+}
+
+/** Labels live next to the values: custom_fields.crm_field_labels = { key: "Display Name" }. */
+export function readCustomLabels(customFields: unknown): Record<string, string> {
+  const ns = asObject(asObject(customFields).crm_field_labels);
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(ns)) if (CUSTOM_KEY.test(k) && typeof v === "string" && v.trim()) out[k] = v;
+  return out;
+}
+
+export const CUSTOM_LABEL_MAX = 60;
+
+/** Server-side key for a display name: "QA Test Bad Name!!" -> "qa_test_bad_name". null if no letters. */
+export function keyFromLabel(label: string): string | null {
+  const key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40).replace(/_+$/, "");
+  return CUSTOM_KEY.test(key) ? key : null;
 }
 
 export interface ContactRow {
@@ -202,6 +220,7 @@ export function toRecord(row: ContactRow, emailStatus = "unverified", phoneStatu
     consent: typeof cf.tcpa_consent === "string" ? cf.tcpa_consent : "none",
     consent_record: readConsentRecord(row.custom_fields),
     custom: readCustomFields(row.custom_fields),
+    custom_labels: readCustomLabels(row.custom_fields),
     created_date: row.created_date,
     updated_date: row.updated_date,
   };
@@ -212,6 +231,12 @@ export function customFieldKeys(records: CrmRecord[]): string[] {
   const keys = new Set<string>();
   for (const r of records) for (const k of Object.keys(r.custom)) keys.add(k);
   return [...keys].sort();
+}
+
+/** Like customFieldDef but uses the stored display name when there is one. */
+export function customFieldDefLabeled(key: string, labels: Record<string, string>): FieldDef {
+  const def = customFieldDef(key);
+  return labels[key] ? { ...def, label: labels[key] } : def;
 }
 
 export function customFieldDef(key: string): FieldDef {
@@ -414,7 +439,7 @@ export function summarize(records: CrmRecord[], now: Date = new Date()): Summary
 
 // ── Writes: validation + history ───────────────────────────────────────────
 
-const RESERVED_CUSTOM = new Set(["tcpa_consent", "crm_fields", "sms_opt_out", "consent_record"]);
+const RESERVED_CUSTOM = new Set(["tcpa_consent", "crm_fields", "crm_field_labels", "sms_opt_out", "consent_record"]);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type PatchInput = Partial<
@@ -433,6 +458,8 @@ export type PatchInput = Partial<
     | "assigned_to"
     | "lead_source"
     | "custom"
+    | "custom_labels"
+    | "add_field"
     | "note",
     unknown
   >
@@ -457,6 +484,8 @@ export interface ColumnPatch {
 export interface SanitizedPatch {
   columns: ColumnPatch;
   custom: Record<string, string | null>;
+  /** Display names to store for custom fields (set when a field is added). */
+  customLabels?: Record<string, string>;
   note: string | null;
   errors: string[];
 }
@@ -535,12 +564,38 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
     if (entries.length > 50) out.errors.push("too many custom fields in one update");
     for (const [k, v] of entries.slice(0, 50)) {
       if (!CUSTOM_KEY.test(k) || RESERVED_CUSTOM.has(k)) {
-        out.errors.push(`custom field '${k}' is not allowed`);
+        out.errors.push(`"${k}" isn't a valid field name. Use letters, numbers or underscores, starting with a letter.`);
         continue;
       }
       const cv = cleanText(v, Number.MAX_SAFE_INTEGER);
       if (tooLong("custom_value", cv)) out.errors.push(tooLong("custom_value", cv)!);
       else out.custom[k] = cv;
+    }
+  }
+  if ("add_field" in p) {
+    // { add_field: { label: "Loan Type!", value: "DSCR" } }: the server makes the key
+    // (letters, numbers, underscores) and keeps the label exactly as typed for display.
+    const f = asObject(p.add_field);
+    const label = typeof f.label === "string" ? f.label.trim() : "";
+    const key = label ? keyFromLabel(label) : null;
+    const value = cleanText(f.value, Number.MAX_SAFE_INTEGER);
+    if (!label) out.errors.push("Give the new field a name.");
+    else if (label.length > CUSTOM_LABEL_MAX) out.errors.push(`Field names can be up to ${CUSTOM_LABEL_MAX} characters.`);
+    else if (/[\u0000-\u001F<>]/.test(label)) out.errors.push("Field names can't contain < > or control characters.");
+    else if (!key || RESERVED_CUSTOM.has(key)) out.errors.push("Field names need to start with a letter.");
+    else if (!value) out.errors.push("Give the new field a value.");
+    else if (tooLong("custom_value", value)) out.errors.push(tooLong("custom_value", value)!);
+    else {
+      out.custom[key] = value;
+      out.customLabels = { ...(out.customLabels ?? {}), [key]: label };
+    }
+  }
+  if ("custom_labels" in p) {
+    for (const [k, v] of Object.entries(asObject(p.custom_labels))) {
+      const label = typeof v === "string" ? v.trim() : "";
+      if (!CUSTOM_KEY.test(k) || RESERVED_CUSTOM.has(k)) out.errors.push(`"${k}" isn't a valid field name. Use letters, numbers or underscores, starting with a letter.`);
+      else if (!label || label.length > CUSTOM_LABEL_MAX || /[\u0000-\u001F<>]/.test(label)) out.errors.push(`Field names can be 1 to ${CUSTOM_LABEL_MAX} characters, without < > or control characters.`);
+      else out.customLabels = { ...(out.customLabels ?? {}), [k]: label };
     }
   }
   if ("note" in p) {
@@ -552,14 +607,23 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
 }
 
 /** Merge a custom-field patch into the stored custom_fields jsonb without touching other keys (e.g. tcpa_consent). */
-export function mergeCustomFields(stored: unknown, patch: Record<string, string | null>): Record<string, unknown> {
+export function mergeCustomFields(
+  stored: unknown,
+  patch: Record<string, string | null>,
+  labels: Record<string, string> = {},
+): Record<string, unknown> {
   const base = { ...asObject(stored) };
   const ns: Record<string, unknown> = { ...asObject(base.crm_fields) };
+  const names: Record<string, unknown> = { ...asObject(base.crm_field_labels) };
   for (const [k, v] of Object.entries(patch)) {
-    if (v === null) delete ns[k];
-    else ns[k] = v;
+    if (v === null) {
+      delete ns[k];
+      delete names[k];
+    } else ns[k] = v;
   }
+  for (const [k, label] of Object.entries(labels)) names[k] = label;
   base.crm_fields = ns;
+  if (Object.keys(names).length > 0 || "crm_field_labels" in base) base.crm_field_labels = names;
   return base;
 }
 
@@ -598,7 +662,7 @@ export function readTimeline(stored: unknown): TimelineEntry[] {
 
 /** Timeline entries describing what a patch changes. Pure: caller supplies time + actor. */
 export function historyFor(
-  before: Partial<Record<keyof ColumnPatch, unknown>> & { custom?: Record<string, string> },
+  before: Partial<Record<keyof ColumnPatch, unknown>> & { custom?: Record<string, string>; customLabels?: Record<string, string> },
   patch: SanitizedPatch,
   actor: string | null,
   at: string,
@@ -617,7 +681,12 @@ export function historyFor(
   }
   for (const [k, v] of Object.entries(patch.custom)) {
     if ((before.custom?.[k] ?? null) === v) continue;
-    entries.push({ type: "field_changed", at, by: actor, detail: `${customFieldDef(k).label} set to ${v ?? "empty"}` });
+    const label = patch.customLabels?.[k] ?? before.customLabels?.[k] ?? customFieldDef(k).label;
+    entries.push({ type: "field_changed", at, by: actor, detail: v === null ? `${label} removed` : `${label} set to ${v}` });
+  }
+  for (const [k, label] of Object.entries(patch.customLabels ?? {})) {
+    if (k in patch.custom || before.customLabels?.[k] === label) continue;
+    entries.push({ type: "field_changed", at, by: actor, detail: `Field ${before.customLabels?.[k] ?? customFieldDef(k).label} renamed to ${label}` });
   }
   if (patch.note) entries.push({ type: "note", at, by: actor, detail: patch.note });
   return entries;

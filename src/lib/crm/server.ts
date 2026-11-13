@@ -10,6 +10,7 @@ import {
   historyFor,
   mergeCustomFields,
   readCustomFields,
+  readCustomLabels,
   readTimeline,
   toRecord,
   type ContactRow,
@@ -115,12 +116,18 @@ export async function updateRecord(
   }
 
   const now = new Date().toISOString();
-  const before = { ...(row as unknown as Record<string, unknown>), custom: readCustomFields(row.custom_fields) };
+  const before = {
+    ...(row as unknown as Record<string, unknown>),
+    custom: readCustomFields(row.custom_fields),
+    customLabels: readCustomLabels(row.custom_fields),
+  };
   const entries = historyFor(before, patch, actor, now);
   if (entries.length === 0) return { ok: true, updated_date: row.updated_date, changes: 0 };
 
   const update: Partial<CrmContact> = { ...patch.columns, updated_date: now };
-  if (Object.keys(patch.custom).length > 0) update.custom_fields = mergeCustomFields(row.custom_fields, patch.custom);
+  if (Object.keys(patch.custom).length > 0 || patch.customLabels) {
+    update.custom_fields = mergeCustomFields(row.custom_fields, patch.custom, patch.customLabels) as CrmContact["custom_fields"];
+  }
   update.engagement_history = appendTimeline(row.engagement_history, entries) as unknown as CrmContact["engagement_history"];
   if (patch.note) update.last_contact = now;
 
