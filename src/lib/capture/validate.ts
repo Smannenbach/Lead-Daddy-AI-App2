@@ -59,3 +59,8 @@ export function captureIdempotencyKey(email: string | null, phone: string | null
   for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) | 0;
   return `capture-${(h >>> 0).toString(16)}`;
 }
+
+/** Tells the page whether consent was given so it can show the right confirmation. */
+export function captureResponse(id: string, consent: boolean, duplicate = false) {
+  return { ok: true, id, consent: { given: consent }, ...(duplicate ? { duplicate: true } : {}) };
+}
