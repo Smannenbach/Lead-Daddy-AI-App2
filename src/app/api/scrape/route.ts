@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
-import { scrapeUrl, LEAD_EXTRACT_PROMPT } from "@/lib/scrape/firecrawl";
+import { scrapeUrl, validateScrapeUrl, LEAD_EXTRACT_PROMPT } from "@/lib/scrape/firecrawl";
+import { apiError } from "@/lib/api/errors";
 import { extractPeopleFromDigest, personToContactInsert } from "@/lib/scrape/digest";
 import { callModelWithFallback, enabledProviders } from "@/lib/ai/providers";
 import { autoSelect } from "@/lib/ai/router";
@@ -27,13 +28,15 @@ export async function POST(request: Request) {
   if ("error" in auth) return auth.error;
 
   const body = (await request.json().catch(() => null)) as ScrapeRequest | null;
-  if (!body?.url?.trim()) return Response.json({ error: "url is required" }, { status: 400 });
+  const url = validateScrapeUrl(body?.url);
+  if (!body || !url) return apiError("invalid_url", "Enter a valid URL, like https://example.com.", 400);
 
   let scraped;
   try {
-    scraped = await scrapeUrl(body.url, LEAD_EXTRACT_PROMPT);
+    scraped = await scrapeUrl(url, LEAD_EXTRACT_PROMPT);
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "scrape failed" }, { status: 502 });
+    console.error("[scrape] provider error", err instanceof Error ? err.message : err);
+    return apiError("scrape_failed", "We couldn't read that page. Check the address and try again.", 502);
   }
 
   // AI digest of raw content -> structured lead intel
@@ -45,7 +48,7 @@ export async function POST(request: Request) {
       { role: "system", content: decision.agent!.systemPrompt },
       {
         role: "user",
-        content: `Source URL: ${body.url}\n\nExtracted data:\n${JSON.stringify(scraped.extracted)}\n\nPage content (first 6000 chars):\n${scraped.markdown.slice(0, 6000)}`,
+        content: `Source URL: ${url}\n\nExtracted data:\n${JSON.stringify(scraped.extracted)}\n\nPage content (first 6000 chars):\n${scraped.markdown.slice(0, 6000)}`,
       },
     ], enabledProviders());
     await logAiRun({
@@ -59,7 +62,8 @@ export async function POST(request: Request) {
     });
     digest = { text: result.text, provider: result.provider, model: result.model };
   } catch (err) {
-    digest = { text: `digest failed: ${err instanceof Error ? err.message : "unknown"}`, provider: "", model: "" };
+    console.error("[scrape] digest error", err instanceof Error ? err.message : err);
+    digest = { text: "The AI summary isn't available right now. The page was read, so try again in a minute.", provider: "", model: "" };
   }
 
   // autoCreate: turn digest people into crm_contact leads. Parse failures
