@@ -676,6 +676,30 @@ export function readTimeline(stored: unknown): TimelineEntry[] {
   return out;
 }
 
+const ACTIVITY_LABELS: Record<string, string> = {
+  first_name: "First name",
+  last_name: "Last name",
+  ...Object.fromEntries(CORE_FIELDS.map((f) => [f.key, f.label])),
+  lead_score: "Score",
+  estimated_value: "Estimated value",
+  next_follow_up: "Follow up date",
+  assigned_to: "Owner",
+  lead_source: "Source",
+};
+
+/** "First name set to Mike", "Tags set to hot, dscr", "Phone cleared". Never a raw column name. */
+export function describeChange(key: string, value: unknown): string {
+  const label = ACTIVITY_LABELS[key] ?? key.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  const empty = value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+  if (empty) return `${label} cleared`;
+  let shown: string;
+  if (Array.isArray(value)) shown = value.join(", ");
+  else if (key === "estimated_value" && typeof value === "number") shown = `$${value.toLocaleString("en-US")}`;
+  else if (key === "next_follow_up" && typeof value === "string") shown = value.slice(0, 10);
+  else shown = String(value);
+  return `${label} set to ${shown}`;
+}
+
 /** Timeline entries describing what a patch changes. Pure: caller supplies time + actor. */
 export function historyFor(
   before: Partial<Record<keyof ColumnPatch, unknown>> & { custom?: Record<string, string>; customLabels?: Record<string, string> },
@@ -688,11 +712,10 @@ export function historyFor(
     const prev = before[k as keyof ColumnPatch];
     if (JSON.stringify(prev ?? null) === JSON.stringify(v ?? null)) continue;
     if (k === "stage") {
-      entries.push({ type: "stage_changed", at, by: actor, detail: `Stage: ${String(prev ?? "new")} → ${String(v)}` });
+      const label = (x: unknown) => STAGES.find((st) => st.key === normalizeStage(x))?.label ?? String(x);
+      entries.push({ type: "stage_changed", at, by: actor, detail: `Stage changed from ${label(prev ?? "new")} to ${label(v)}` });
     } else {
-      const label = CORE_FIELDS.find((f) => f.key === k)?.label ?? k;
-      const shown = Array.isArray(v) ? v.join(", ") : (v ?? "");
-      entries.push({ type: "field_changed", at, by: actor, detail: `${label} set to ${String(shown) || "empty"}` });
+      entries.push({ type: "field_changed", at, by: actor, detail: describeChange(k, v) });
     }
   }
   for (const [k, v] of Object.entries(patch.custom)) {

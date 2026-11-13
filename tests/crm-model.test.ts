@@ -155,7 +155,7 @@ describe("timeline", () => {
     const patch = sanitizePatch({ stage: "qualified", company: "Acme", custom: { state: "AZ" }, note: "Called, wants DSCR quote" });
     const h = historyFor({ stage: "new", company: "Acme", custom: {} }, patch, "steve@loandaddy.ai", "2026-11-09T00:00:00Z");
     expect(h.map((e) => e.type)).toEqual(["stage_changed", "field_changed", "note"]);
-    expect(h[0].detail).toBe("Stage: new → qualified");
+    expect(h[0].detail).toBe("Stage changed from New to Qualified");
   });
   it("caps history but never rewrites or drops older entries of other shapes", () => {
     const legacy = { date: "2026-10-01T00:00:00Z", type: "email_sent", description: "Sent email: Hello", outcome: "sent" };

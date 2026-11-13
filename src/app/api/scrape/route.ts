@@ -8,6 +8,7 @@ import { logAiRun, assertAiBudget } from "@/lib/ai/log";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyContactPoints } from "@/lib/verify/contact-points";
+import { logVerification } from "@/lib/verify/activity";
 
 interface ScrapeRequest {
   url: string;
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
                 row.email ? { kind: "email" as const, value: row.email } : null,
                 row.phone ? { kind: "phone" as const, value: row.phone } : null,
               ].filter((t) => t !== null);
-              if (targets.length > 0) await verifyContactPoints(targets);
+              if (targets.length > 0) await logVerification(data.id, await verifyContactPoints(targets), auth.user.email ?? null);
             }
           } catch {
             // non-fatal: skip this person, keep creating the rest

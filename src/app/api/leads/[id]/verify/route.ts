@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyContactPoints, type VerifyResult } from "@/lib/verify/contact-points";
+import { logVerification } from "@/lib/verify/activity";
 
 // Frozen contract: -> { contactId, results: [{ kind, value, provider, result }] }
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -28,6 +29,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   }
 
   const results: VerifyResult[] = await verifyContactPoints(targets);
+  await logVerification(contactId, results, auth.user.email ?? null);
 
   return Response.json({ contactId, results });
 }
