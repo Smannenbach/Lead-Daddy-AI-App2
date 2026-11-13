@@ -27,29 +27,46 @@ function asTrimmedString(v: unknown): string | null {
   return t.length > 0 ? t : null;
 }
 
+export interface SkippedRow {
+  /** 1-based position in the file (header counted when the caller says there is one). */
+  row: number;
+  reason: string;
+}
+
+/** Each kept row remembers where it came from so skips can be reported by row number. */
+export interface NumberedRow extends ImportRow {
+  rowNumber: number;
+}
+
 /**
  * Validate raw CSV rows. A row is kept when it has a first_name or an
  * email; rows with neither are skipped (counted, not an error), as are
  * non-object rows. Non-string field values become null. Unknown extra
  * fields are dropped. Non-array input yields an empty result.
+ * `firstRowNumber` is the file line of input[0] (2 when the file has a header).
  */
-export function validateImportRows(input: unknown): { rows: ImportRow[]; skipped: number } {
-  if (!Array.isArray(input)) return { rows: [], skipped: 0 };
-  const rows: ImportRow[] = [];
-  let skipped = 0;
-  for (const raw of input) {
+export function validateImportRows(
+  input: unknown,
+  firstRowNumber = 1,
+): { rows: NumberedRow[]; skipped: number; skippedRows: SkippedRow[] } {
+  if (!Array.isArray(input)) return { rows: [], skipped: 0, skippedRows: [] };
+  const rows: NumberedRow[] = [];
+  const skippedRows: SkippedRow[] = [];
+  input.forEach((raw, i) => {
+    const rowNumber = firstRowNumber + i;
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-      skipped++;
-      continue;
+      skippedRows.push({ row: rowNumber, reason: "Row could not be read" });
+      return;
     }
     const r = raw as Record<string, unknown>;
     const firstName = asTrimmedString(r.first_name);
     const email = normalizeEmail(r.email) || null;
     if (!firstName && !email) {
-      skipped++;
-      continue;
+      skippedRows.push({ row: rowNumber, reason: "Missing a first name and an email" });
+      return;
     }
     rows.push({
+      rowNumber,
       first_name: firstName,
       last_name: asTrimmedString(r.last_name),
       email,
@@ -57,33 +74,42 @@ export function validateImportRows(input: unknown): { rows: ImportRow[]; skipped
       company: asTrimmedString(r.company),
       job_title: asTrimmedString(r.job_title),
     });
-  }
-  return { rows, skipped };
+  });
+  return { rows, skipped: skippedRows.length, skippedRows };
 }
 
-export interface DedupeSplit {
+export interface DedupeSplit<T extends ImportRow = ImportRow> {
   /** Rows to insert, in input order. */
-  fresh: ImportRow[];
-  /** How many rows were dropped because their email already exists. */
+  fresh: T[];
+  /** How many rows were dropped because their email already exists or repeats in the file. */
   duplicates: number;
+  skippedRows: SkippedRow[];
 }
 
 /**
  * Split validated rows against the normalized emails that already exist in
- * crm_contact (same org, not deleted). Rows without an email can never be
- * duplicates and always stay.
+ * crm_contact (same org, not deleted) AND against earlier rows of the same
+ * file. Rows without an email can never be duplicates and always stay.
  */
-export function splitDuplicates(rows: ImportRow[], existingEmails: ReadonlySet<string>): DedupeSplit {
-  const fresh: ImportRow[] = [];
-  let duplicates = 0;
-  for (const row of rows) {
-    if (row.email && existingEmails.has(row.email)) {
-      duplicates++;
-      continue;
+export function splitDuplicates<T extends ImportRow>(rows: T[], existingEmails: ReadonlySet<string>): DedupeSplit<T> {
+  const fresh: T[] = [];
+  const skippedRows: SkippedRow[] = [];
+  const firstSeenAt = new Map<string, number>();
+  rows.forEach((row, i) => {
+    const rowNumber = (row as Partial<NumberedRow>).rowNumber ?? i + 1;
+    const email = row.email ? normalizeEmail(row.email) : "";
+    if (email && existingEmails.has(email)) {
+      skippedRows.push({ row: rowNumber, reason: `A lead with ${email} already exists` });
+      return;
     }
+    if (email && firstSeenAt.has(email)) {
+      skippedRows.push({ row: rowNumber, reason: `Same email as row ${firstSeenAt.get(email)}` });
+      return;
+    }
+    if (email) firstSeenAt.set(email, rowNumber);
     fresh.push(row);
-  }
-  return { fresh, duplicates };
+  });
+  return { fresh, duplicates: skippedRows.length, skippedRows };
 }
 
 /** Normalized emails worth checking against the DB (unique, non-null). */

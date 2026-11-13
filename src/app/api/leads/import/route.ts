@@ -12,15 +12,16 @@ import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 
 // Frozen contract: body { rows: [{first_name?, last_name?, email?, phone?,
-//   company?, job_title?}] } (max 500) -> { created, skipped }
+//   company?, job_title?}], hasHeader? } (max 500) -> { created, skipped, skippedRows: [{ row, reason }] }
 // Dedupe: a row whose normalized email already exists in crm_contact (same
-// org, not deleted) is skipped and counted, not an error. Rows without
+// org, not deleted) OR repeats an earlier row in the same file is skipped and
+// counted, not an error. Rows without
 // first_name AND without email are skipped. Inserts go in batches of 100.
 export async function POST(request: Request) {
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
 
-  const body = (await request.json().catch(() => null)) as { rows?: unknown; tcpaConsent?: boolean } | null;
+  const body = (await request.json().catch(() => null)) as { rows?: unknown; tcpaConsent?: boolean; hasHeader?: boolean } | null;
   if (!Array.isArray(body?.rows)) {
     return Response.json({ error: "rows must be an array" }, { status: 400 });
   }
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
   const db = createServiceClient();
   const orgId = organizationId();
 
-  const { rows, skipped } = validateImportRows(body.rows);
+  const { rows, skippedRows: invalidRows } = validateImportRows(body.rows, body.hasHeader ? 2 : 1);
   const emails = candidateEmails(rows);
 
   let existingEmails = new Set<string>();
@@ -49,7 +50,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { fresh, duplicates } = splitDuplicates(rows, existingEmails);
+  const { fresh, skippedRows: duplicateRows } = splitDuplicates(rows, existingEmails);
+  const skippedRows = [...invalidRows, ...duplicateRows].sort((a, b) => a.row - b.row);
 
   let created = 0;
   const now = new Date().toISOString();
@@ -77,5 +79,5 @@ export async function POST(request: Request) {
     created += data?.length ?? 0;
   }
 
-  return Response.json({ created, skipped: skipped + duplicates });
+  return Response.json({ created, skipped: skippedRows.length, skippedRows });
 }
