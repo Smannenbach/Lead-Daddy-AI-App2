@@ -745,7 +745,7 @@ export function patchBodyFor(field: Pick<FieldDef, "key">, value: string): Recor
 
 // ── Export ─────────────────────────────────────────────────────────────────
 
-function csvCell(v: string): string {
+export function csvCell(v: string): string {
   const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v; // neutralize spreadsheet formula injection
   return `"${safe.replace(/"/g, '""')}"`;
 }
