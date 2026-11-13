@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   CORE_FIELDS,
-  CUSTOM_KEY,
   STAGES,
-  customFieldDef,
+  customFieldDefLabeled,
   displayName,
   patchBodyFor,
   type CrmRecord,
@@ -14,14 +14,19 @@ import {
   type StageKey,
   type TimelineEntry,
 } from "@/lib/crm/model";
+import { sendJson } from "@/lib/client/api";
 import { EditableCell } from "@/components/crm/EditableCell";
-import { STAGE_STYLES, StatusText, btnCls, btnPrimaryCls, inputCls, relative } from "@/components/crm/ui";
+import { STAGE_STYLES, StatusText, exactTime, relative } from "@/components/crm/ui";
+import { PageBody } from "@/components/app/AppShell";
+import { useDialogs } from "@/components/ui/Dialog";
+import { btn, btnDanger, btnPrimary, card, cardHeader, h2, input } from "@/components/ui/styles";
 
-const DETAIL_FIELDS = CORE_FIELDS.filter((f) => f.key !== "name" && f.key !== "stage");
+const DETAIL_FIELDS = CORE_FIELDS.filter((f) => !["name", "stage", "consent"].includes(f.key));
 const NAME_FIELDS: FieldDef[] = [
   { key: "first_name", label: "First name", type: "text", editable: true },
   { key: "last_name", label: "Last name", type: "text", editable: true },
 ];
+const FORM_ANSWER_KEY = "financing_need";
 
 const TIMELINE_ICON: Record<TimelineEntry["type"], string> = {
   created: "＋",
@@ -32,25 +37,91 @@ const TIMELINE_ICON: Record<TimelineEntry["type"], string> = {
   system: "•",
 };
 
+const METHOD_TEXT: Record<string, string> = {
+  web_form: "The lead checked the consent box on a web form",
+  rep_attested: "A team member recorded consent when adding the lead",
+  rep_attested_import: "A team member recorded consent for a CSV import",
+  sms_keyword: "Recorded from a text message reply",
+};
+
+/** What the rep is allowed to do, in plain words, from the consent fields. */
+function ContactPermission({ record }: { record: CrmRecord }) {
+  const rec = record.consent_record;
+  const status = record.consent;
+  const allowed = status === "granted";
+  return (
+    <section className={card} aria-labelledby="perm-h">
+      <div className={cardHeader}>
+        <h2 id="perm-h" className={h2}>Contact permission</h2>
+        <StatusText value={status} />
+      </div>
+      <div className="space-y-3 p-4 text-sm">
+        <p className={`rounded-lg px-3 py-2 font-medium ${allowed ? "bg-emerald-50 text-emerald-800" : status === "revoked" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
+          {allowed
+            ? "Campaigns can text and call this lead."
+            : status === "revoked"
+              ? "This lead opted out. Campaigns won't text or call them."
+              : "No consent on file. Campaigns skip this lead for texts and calls."}
+        </p>
+        {rec ? (
+          <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1.5">
+            <dt className="text-slate-500">How</dt>
+            <dd>{METHOD_TEXT[rec.method] ?? rec.method}</dd>
+            <dt className="text-slate-500">When</dt>
+            <dd>{exactTime(rec.at)}</dd>
+            {rec.revoked_at && (
+              <>
+                <dt className="text-slate-500">Opted out</dt>
+                <dd>{exactTime(rec.revoked_at)}</dd>
+              </>
+            )}
+            <dt className="text-slate-500">Where</dt>
+            <dd className="break-all">{rec.source}</dd>
+            {rec.captured_by && (
+              <>
+                <dt className="text-slate-500">Recorded by</dt>
+                <dd className="break-all">{rec.captured_by}</dd>
+              </>
+            )}
+            {rec.wording_text && (
+              <>
+                <dt className="text-slate-500">Wording</dt>
+                <dd className="text-slate-700">&ldquo;{rec.wording_text}&rdquo;</dd>
+              </>
+            )}
+          </dl>
+        ) : (
+          <p className="text-slate-500">
+            {status === "granted"
+              ? "Consent was recorded before Lead Daddy kept details of how and when."
+              : "No consent record yet."}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function RecordView({ id }: { id: string }) {
+  const router = useRouter();
   const [record, setRecord] = useState<CrmRecord | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
-  const [newKey, setNewKey] = useState("");
+  const [newLabel, setNewLabel] = useState("");
   const [newVal, setNewVal] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState("");
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const { confirm, dialogs } = useDialogs();
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/crm/records/${id}`, { cache: "no-store" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(data.error ?? "Could not load record");
+    const r = await sendJson(`/api/crm/records/${id}`, "GET");
+    if (!r.ok) {
+      setError(String(r.data.error));
       return;
     }
-    setRecord(data.record);
-    setTimeline(Array.isArray(data.timeline) ? data.timeline : []);
+    setRecord(r.data.record as CrmRecord);
+    setTimeline(Array.isArray(r.data.timeline) ? (r.data.timeline as TimelineEntry[]) : []);
     setError("");
   }, [id]);
 
@@ -65,110 +136,148 @@ export default function RecordView({ id }: { id: string }) {
     };
   }, [load]);
 
-  async function patch(body: Record<string, unknown>): Promise<boolean> {
+  const say = (text: string, isError = false) => setMessage({ text, error: isError });
+
+  async function patch(body: Record<string, unknown>, label = "Saving"): Promise<boolean> {
     if (!record) return false;
-    setBusy(true);
-    const res = await fetch(`/api/crm/records/${record.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...body, expectedUpdated: record.updated_date }),
-    });
-    const data = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (!res.ok) {
-      setToast(data.errors?.join("; ") ?? data.error ?? "Save failed");
-      if (res.status === 409) await load();
+    setBusy(label);
+    const r = await sendJson(`/api/crm/records/${record.id}`, "PATCH", { ...body, expectedUpdated: record.updated_date });
+    setBusy("");
+    if (!r.ok) {
+      say(String(r.data.error), true);
+      if (r.status === 409) await load();
       return false;
     }
-    setToast("");
+    setMessage(null);
     await load();
     return true;
   }
 
   async function verify() {
     if (!record) return;
-    setBusy(true);
-    const res = await fetch(`/api/leads/${record.id}/verify`, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (!res.ok) {
-      setToast(data.error ?? "Verification failed");
-      return;
-    }
-    const summary = (data.results ?? []).map((r: { kind: string; result: string }) => `${r.kind}: ${r.result}`).join(", ");
-    setToast(summary ? `Verified — ${summary}` : "Nothing to verify.");
+    setBusy("Checking cost");
+    const dry = await sendJson(`/api/leads/${record.id}/verify?dryRun=true`, "POST");
+    setBusy("");
+    if (!dry.ok) return say(String(dry.data.error), true);
+    const checks = (dry.data.checks as Array<{ kind: string; value: string }>) ?? [];
+    const cost = dry.data.cost as { estimatedCredits: number | null };
+    const left = dry.data.emailCreditsRemaining as number | null;
+    const ok = await confirm({
+      title: "Verify this lead?",
+      confirmLabel: "Verify",
+      body: (
+        <div className="space-y-2">
+          <p>This checks {checks.map((c) => `${c.kind} ${c.value}`).join(" and ")}.</p>
+          <p>
+            Cost: {cost.estimatedCredits === null ? `${checks.length} paid check${checks.length === 1 ? "" : "s"} (the credit price isn't set yet)` : `${cost.estimatedCredits} credit(s)`}.
+          </p>
+          <p>Email verification credits left: {left === null ? "unknown" : left.toLocaleString()}.</p>
+        </div>
+      ),
+    });
+    if (!ok) return;
+    setBusy("Verifying");
+    const r = await sendJson(`/api/leads/${record.id}/verify`, "POST");
+    setBusy("");
+    if (!r.ok) return say(String(r.data.error), true);
+    const lines = ((r.data.results as Array<{ message: string }>) ?? []).map((x) => x.message);
+    const remaining = r.data.emailCreditsRemaining as number | null;
+    say(`${lines.join(" ")}${remaining !== null ? ` ${remaining.toLocaleString()} email credits left.` : ""}`);
+    await load();
+  }
+
+  async function deleteLead() {
+    if (!record) return;
+    const ok = await confirm({
+      title: `Delete ${displayName(record)}?`,
+      body: "The lead will be removed from Leads, exports and every campaign's recipients. This is logged.",
+      confirmLabel: "Delete lead",
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy("Deleting");
+    const r = await sendJson(`/api/crm/records/${record.id}`, "DELETE");
+    setBusy("");
+    if (!r.ok) return say(String(r.data.error), true);
+    router.push("/crm");
+  }
+
+  async function deleteNote(entry: TimelineEntry) {
+    if (!record || !entry.id) return;
+    const ok = await confirm({ title: "Delete this note?", body: <p className="whitespace-pre-wrap">&ldquo;{entry.detail}&rdquo;</p>, confirmLabel: "Delete note", danger: true });
+    if (!ok) return;
+    const r = await sendJson(`/api/crm/records/${record.id}/notes/${entry.id}`, "DELETE");
+    if (!r.ok) return say(String(r.data.error), true);
     await load();
   }
 
   async function addNote(e: FormEvent) {
     e.preventDefault();
     if (!note.trim()) return;
-    if (await patch({ note: note.trim() })) setNote("");
+    if (await patch({ note: note.trim() }, "Adding note")) setNote("");
   }
 
-  async function addCustom(e: FormEvent) {
+  async function addField(e: FormEvent) {
     e.preventDefault();
-    const key = newKey.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    if (!CUSTOM_KEY.test(key)) {
-      setToast("Field names must start with a letter and use letters, numbers or underscores (max 40).");
-      return;
-    }
-    if (!newVal.trim()) {
-      setToast("Give the new field a value.");
-      return;
-    }
-    if (await patch({ custom: { [key]: newVal.trim() } })) {
-      setNewKey("");
+    // The server turns the name into a safe key and keeps the name as typed.
+    if (await patch({ add_field: { label: newLabel.trim(), value: newVal.trim() } }, "Adding field")) {
+      setNewLabel("");
       setNewVal("");
     }
   }
 
   if (error) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-8">
-        <Link href="/crm" className="text-sm text-neutral-400 hover:text-white">← Back to workspace</Link>
-        <p className="mt-6 rounded-lg border border-red-900 bg-red-950/30 p-4 text-sm text-red-300">{error}</p>
-      </main>
+      <PageBody>
+        <Link href="/crm" className="text-sm font-medium text-indigo-600 hover:text-indigo-800">← Back to Leads</Link>
+        <p role="alert" className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>
+      </PageBody>
     );
   }
-  if (!record) return <main className="mx-auto max-w-3xl px-4 py-10 text-sm text-neutral-500 sm:px-8">Loading…</main>;
+  if (!record) return <PageBody><p className="text-sm text-slate-500">Loading lead…</p></PageBody>;
 
-  const customFields = Object.keys(record.custom).sort().map(customFieldDef);
+  const labels = record.custom_labels ?? {};
+  const formAnswer = record.custom[FORM_ANSWER_KEY];
+  const customFields = Object.keys(record.custom).filter((k) => k !== FORM_ANSWER_KEY).sort().map((k) => customFieldDefLabeled(k, labels));
   const save = (field: FieldDef, value: string) => patch(patchBodyFor(field, value));
+  const stageIdx = STAGES.findIndex((x) => x.key === record.stage);
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8">
-      <div className="mb-4 text-xs text-neutral-500">
-        <Link href="/" className="hover:text-neutral-300">Console</Link> / <Link href="/crm" className="hover:text-neutral-300">CRM</Link> / {displayName(record)}
+    <PageBody>
+      {dialogs}
+      <div className="mb-3 text-sm text-slate-500">
+        <Link href="/crm" className="font-medium text-indigo-600 hover:text-indigo-800">Leads</Link> / <span className="text-slate-700">{displayName(record)}</span>
       </div>
 
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{displayName(record)}</h1>
-          <p className="text-sm text-neutral-400">{[record.job_title, record.company].filter(Boolean).join(" · ") || "No company yet"}</p>
+      <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{displayName(record)}</h1>
+          <p className="truncate text-sm text-slate-500">{[record.job_title, record.company].filter(Boolean).join(" · ") || "No company yet"}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button className={btnCls} disabled={busy || (!record.email && !record.phone)} onClick={verify}>Verify contact points</button>
-          {record.email && <a className={btnCls} href={`mailto:${record.email}`}>Email</a>}
+        <div className="flex flex-wrap gap-2">
+          <button className={btn} disabled={Boolean(busy) || (!record.email && !record.phone)} onClick={verify}>
+            {busy === "Verifying" ? "Verifying…" : busy === "Checking cost" ? "Checking cost…" : "Verify (uses credits)"}
+          </button>
+          {record.email && <a className={btn} href={`mailto:${record.email}`}>Email</a>}
+          <button className={btnDanger} disabled={Boolean(busy)} onClick={deleteLead}>{busy === "Deleting" ? "Deleting…" : "Delete"}</button>
         </div>
       </header>
 
-      <ol className="mb-6 flex overflow-x-auto rounded-xl border border-neutral-800" aria-label="Pipeline stage">
-        {STAGES.map((s) => {
+      <ol className={`${card} mb-5 flex overflow-x-auto`} aria-label="Pipeline stage">
+        {STAGES.map((s, i) => {
           const active = s.key === record.stage;
-          const idx = STAGES.findIndex((x) => x.key === record.stage);
-          const passed = STAGES.findIndex((x) => x.key === s.key) < idx && record.stage !== "lost";
+          const passed = i < stageIdx && record.stage !== "lost";
           return (
-            <li key={s.key} className="flex-1">
+            <li key={s.key} className="min-w-[110px] flex-1">
               <button
-                disabled={busy || active}
-                onClick={() => patch({ stage: s.key as StageKey })}
-                className={`w-full whitespace-nowrap border-r border-neutral-800 px-3 py-2 text-sm last:border-r-0 ${
-                  active ? "bg-neutral-100 font-medium text-neutral-900" : passed ? "bg-neutral-900 text-neutral-300" : "text-neutral-500 hover:bg-neutral-900 hover:text-neutral-200"
+                disabled={Boolean(busy) || active}
+                onClick={() => patch({ stage: s.key as StageKey }, "Moving")}
+                className={`flex w-full items-center justify-center gap-1.5 whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-sm last:border-r-0 ${
+                  active ? "bg-indigo-600 font-semibold text-white" : passed ? "bg-indigo-50 text-indigo-800" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                 }`}
                 aria-current={active ? "step" : undefined}
               >
-                <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${STAGE_STYLES[s.key].dot}`} />
+                {passed ? <span aria-hidden>✓</span> : <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-white" : STAGE_STYLES[s.key].dot}`} />}
                 {s.label}
               </button>
             </li>
@@ -176,77 +285,87 @@ export default function RecordView({ id }: { id: string }) {
         })}
       </ol>
 
-      {toast && <p role="status" className="mb-4 rounded-lg bg-neutral-900 px-4 py-2 text-sm">{toast}</p>}
+      {message && (
+        <p role={message.error ? "alert" : "status"} className={`mb-4 rounded-lg px-4 py-2.5 text-sm ${message.error ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>
+          {message.text}
+        </p>
+      )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-        <section className="rounded-xl border border-neutral-800">
-          <h2 className="border-b border-neutral-800 px-4 py-3 text-sm font-medium">Details</h2>
-          <dl className="divide-y divide-neutral-800/70">
-            {[...NAME_FIELDS, ...DETAIL_FIELDS].map((f) => (
-              <div key={f.key} className="grid grid-cols-[140px_1fr] items-center gap-3 px-4 py-2 text-sm">
-                <dt className="text-neutral-500">{f.label}</dt>
-                <dd className="min-w-0">
-                  {f.key === "consent" ? (
-                    <span className="flex items-center gap-2">
-                      <StatusText value={record.consent} />
-                      <span className="text-xs text-neutral-600">recorded at capture; not editable here</span>
-                    </span>
-                  ) : (
-                    <EditableCell record={record} field={f} onSave={save} />
-                  )}
-                </dd>
+      <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
+        <div className="space-y-5">
+          {formAnswer && (
+            <section className={card} aria-labelledby="answer-h">
+              <div className={cardHeader}><h2 id="answer-h" className={h2}>Form answer</h2></div>
+              <div className="p-4 text-sm">
+                <p className="font-medium text-slate-500">{labels[FORM_ANSWER_KEY] ?? "What are you looking to finance?"}</p>
+                <p className="mt-1 whitespace-pre-wrap text-slate-900">{formAnswer}</p>
               </div>
-            ))}
-          </dl>
-          <h3 className="border-y border-neutral-800 px-4 py-3 text-sm font-medium">Custom fields</h3>
-          <dl className="divide-y divide-neutral-800/70">
-            {customFields.length === 0 && <p className="px-4 py-3 text-sm text-neutral-500">None yet. Add fields like loan_type, property_state or credit_band.</p>}
-            {customFields.map((f) => (
-              <div key={f.key} className="grid grid-cols-[140px_1fr_auto] items-center gap-3 px-4 py-2 text-sm">
-                <dt className="truncate text-neutral-500">{f.label}</dt>
-                <dd className="min-w-0"><EditableCell record={record} field={f} onSave={save} /></dd>
-                <button className="text-xs text-neutral-600 hover:text-red-300" onClick={() => patch({ custom: { [f.key.slice(7)]: "" } })} aria-label={`Remove ${f.label}`}>Remove</button>
-              </div>
-            ))}
-          </dl>
-          <form onSubmit={addCustom} className="flex flex-wrap gap-2 border-t border-neutral-800 p-4">
-            <input className={`${inputCls} w-40`} placeholder="field_name" value={newKey} onChange={(e) => setNewKey(e.target.value)} aria-label="New field name" />
-            <input className={`${inputCls} flex-1`} placeholder="Value" value={newVal} onChange={(e) => setNewVal(e.target.value)} aria-label="New field value" />
-            <button className={btnCls} disabled={busy}>Add field</button>
-          </form>
-        </section>
+            </section>
+          )}
 
-        <section className="flex flex-col rounded-xl border border-neutral-800">
-          <h2 className="border-b border-neutral-800 px-4 py-3 text-sm font-medium">Activity</h2>
-          <form onSubmit={addNote} className="border-b border-neutral-800 p-4">
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              placeholder="Log a call, meeting or note…"
-              className={`${inputCls} w-full resize-y`}
-              aria-label="New note"
-            />
-            <div className="mt-2 flex justify-end">
-              <button className={btnPrimaryCls} disabled={busy || !note.trim()}>Add note</button>
-            </div>
-          </form>
-          <ol className="flex-1 space-y-4 overflow-y-auto p-4">
-            {timeline.length === 0 && <li className="text-sm text-neutral-500">No activity yet. Edits, stage moves and notes are recorded here.</li>}
-            {timeline.map((t, i) => (
-              <li key={`${t.at}-${i}`} className="flex gap-3 text-sm">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-xs text-neutral-400" aria-hidden>
-                  {TIMELINE_ICON[t.type] ?? "•"}
-                </span>
-                <div className="min-w-0">
-                  <p className={t.type === "note" ? "whitespace-pre-wrap text-neutral-100" : "text-neutral-300"}>{t.detail}</p>
-                  <p className="text-xs text-neutral-500">{relative(t.at)}{t.by ? ` · ${t.by}` : ""}</p>
+          <section className={card} aria-labelledby="details-h">
+            <div className={cardHeader}><h2 id="details-h" className={h2}>Details</h2></div>
+            <dl className="divide-y divide-slate-100">
+              {[...NAME_FIELDS, ...DETAIL_FIELDS].map((f) => (
+                <div key={f.key} className="grid grid-cols-[120px_1fr] items-center gap-3 px-4 py-2 text-sm sm:grid-cols-[140px_1fr]">
+                  <dt className="text-slate-500">{f.label}</dt>
+                  <dd className="min-w-0"><EditableCell record={record} field={f} onSave={save} /></dd>
                 </div>
-              </li>
-            ))}
-          </ol>
-        </section>
+              ))}
+            </dl>
+            <h3 className="border-y border-slate-200 px-4 py-3 text-sm font-semibold">Custom fields</h3>
+            <dl className="divide-y divide-slate-100">
+              {customFields.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">None yet. Add fields like Loan type, Property state or Credit band.</p>}
+              {customFields.map((f) => (
+                <div key={f.key} className="grid grid-cols-[120px_1fr_auto] items-center gap-3 px-4 py-2 text-sm sm:grid-cols-[140px_1fr_auto]">
+                  <dt className="truncate text-slate-500" title={f.label}>{f.label}</dt>
+                  <dd className="min-w-0"><EditableCell record={record} field={f} onSave={save} /></dd>
+                  <button className="text-xs font-medium text-slate-500 hover:text-red-700" onClick={() => patch({ custom: { [f.key.slice(7)]: "" } }, "Removing")} aria-label={`Remove ${f.label}`}>Remove</button>
+                </div>
+              ))}
+            </dl>
+            <form onSubmit={addField} className="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row">
+              <input className={`${input} sm:w-44`} placeholder="Field name" maxLength={60} value={newLabel} onChange={(e) => setNewLabel(e.target.value)} aria-label="New field name" />
+              <input className={`${input} flex-1`} placeholder="Value" maxLength={500} value={newVal} onChange={(e) => setNewVal(e.target.value)} aria-label="New field value" />
+              <button className={btn} disabled={Boolean(busy) || !newLabel.trim() || !newVal.trim()}>{busy === "Adding field" ? "Adding…" : "Add field"}</button>
+            </form>
+          </section>
+        </div>
+
+        <div className="space-y-5">
+          <ContactPermission record={record} />
+
+          <section className={`${card} flex flex-col`} aria-labelledby="activity-h">
+            <div className={cardHeader}><h2 id="activity-h" className={h2}>Activity</h2></div>
+            <form onSubmit={addNote} className="border-b border-slate-200 p-4">
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={4000} placeholder="Log a call, meeting or note…" className={`${input} w-full resize-y`} aria-label="New note" />
+              <div className="mt-2 flex justify-end">
+                <button className={btnPrimary} disabled={Boolean(busy) || !note.trim()}>{busy === "Adding note" ? "Adding…" : "Add note"}</button>
+              </div>
+            </form>
+            <ol className="max-h-[640px] flex-1 space-y-4 overflow-y-auto p-4">
+              {timeline.length === 0 && <li className="text-sm text-slate-500">No activity yet. Edits, stage moves, verifications and notes show here.</li>}
+              {timeline.map((t, i) => (
+                <li key={t.id ?? `${t.at}-${i}`} className="flex gap-3 text-sm">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs text-slate-500" aria-hidden>
+                    {TIMELINE_ICON[t.type] ?? "•"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className={`break-words ${t.type === "note" ? "whitespace-pre-wrap text-slate-900" : "text-slate-700"}`}>{t.detail}</p>
+                    <p className="text-xs text-slate-500">
+                      <time dateTime={t.at} title={relative(t.at)}>{exactTime(t.at)}</time>
+                      {t.by ? ` · ${t.by}` : ""}
+                    </p>
+                  </div>
+                  {t.type === "note" && t.id && (
+                    <button onClick={() => deleteNote(t)} className="self-start text-xs font-medium text-slate-400 hover:text-red-700" aria-label="Delete note">Delete</button>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
       </div>
-    </main>
+    </PageBody>
   );
 }

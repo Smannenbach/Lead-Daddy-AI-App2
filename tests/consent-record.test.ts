@@ -20,7 +20,7 @@ describe("consent record", () => {
   it("stored wording matches the live checkbox text exactly", () => {
     const page = readFileSync("src/app/bfcm/page.tsx", "utf8").replace(/&amp;/g, "&").replace(/\s+/g, " ");
     expect(page).toContain(CONSENT_WORDING["bfcm-form-2026-11"]);
-    const consolePage = readFileSync("src/app/page.tsx", "utf8");
+    const consolePage = readFileSync("src/components/app/LeadTools.tsx", "utf8");
     expect(consolePage).toContain(CONSENT_WORDING["console-add-lead-2026-11"]);
   });
 

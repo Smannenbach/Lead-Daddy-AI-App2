@@ -18,7 +18,7 @@ export const CONSENT_WORDING: Readonly<Record<string, string>> = {
   // src/app/bfcm/page.tsx checkbox, as of 2026-11-13
   "bfcm-form-2026-11":
     "I agree to be contacted by phone, SMS, and email about this offer (TCPA consent). Message & data rates may apply; opt out anytime.",
-  // src/app/page.tsx "Add a lead" checkbox, as of 2026-11-13
+  // "Add a lead" checkbox (src/components/app/LeadTools.tsx, was src/app/page.tsx), as of 2026-11-13
   "console-add-lead-2026-11": "Lead granted TCPA consent for SMS/call outreach",
   // CSV import has no consent wording of its own: the rep attests for the whole file.
   "csv-import-2026-11": "Lead granted TCPA consent for SMS/call outreach (applied to every row of the import)",

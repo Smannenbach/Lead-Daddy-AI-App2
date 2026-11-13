@@ -27,3 +27,20 @@ describe("logged out", () => {
     expect((await hit("/api/leads")).status).toBe(200);
   });
 });
+
+describe("new app pages are behind login", () => {
+  it.each(["/pipeline", "/campaigns", "/import", "/scraper", "/settings"])("%s redirects to login when signed out", async (path) => {
+    user = null;
+    const res = await hit(path);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://app2.leaddaddy.ai/login");
+  });
+  it("/api/verify/credits returns 401 JSON when signed out", async () => {
+    user = null;
+    expect((await hit("/api/verify/credits")).status).toBe(401);
+  });
+  it("every app page is in the matcher", async () => {
+    const { APP_PAGES, config } = await import("@/proxy");
+    for (const p of APP_PAGES) expect(config.matcher).toContain(`${p}/:path*`);
+  });
+});

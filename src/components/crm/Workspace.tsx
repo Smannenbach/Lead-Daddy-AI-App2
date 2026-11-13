@@ -1,20 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CORE_FIELDS,
   DEFAULT_VIEW,
   FILTER_OPS,
+  PRESET_VIEWS,
   STAGES,
   applyView,
-  customFieldDef,
+  customFieldDefLabeled,
   customFieldKeys,
   displayName,
   groupByStage,
   patchBodyFor,
   summarize,
-  toCsv,
   type CrmRecord,
   type FieldDef,
   type Filter,
@@ -22,8 +22,12 @@ import {
   type ViewState,
 } from "@/lib/crm/model";
 import { allViews, isPreset, loadActiveViewId, loadSavedViews, newViewId, storeActiveViewId, storeSavedViews } from "@/lib/crm/views";
+import { sendJson } from "@/lib/client/api";
 import { EditableCell } from "@/components/crm/EditableCell";
-import { STAGE_STYLES, btnCls, btnPrimaryCls, inputCls, money } from "@/components/crm/ui";
+import { STAGE_STYLES, money } from "@/components/crm/ui";
+import { PageBody, PageHeader } from "@/components/app/AppShell";
+import { useDialogs } from "@/components/ui/Dialog";
+import { btn, btnDanger, btnPrimary, card, input } from "@/components/ui/styles";
 
 /** Apply a local, optimistic version of an edit so the UI responds instantly. */
 function optimistic(r: CrmRecord, field: FieldDef, value: string): CrmRecord {
@@ -41,37 +45,40 @@ function optimistic(r: CrmRecord, field: FieldDef, value: string): CrmRecord {
   return { ...r, [field.key]: value.trim() === "" ? null : value.trim() };
 }
 
-export default function Workspace() {
+/** Default value for a filter when its field changes, so an old value never carries over. */
+function freshFilterValue(field: string): string {
+  return field === "stage" ? "new" : "";
+}
+
+export default function Workspace({ initialViewId, title = "Leads" }: { initialViewId?: string; title?: string }) {
   const [records, setRecords] = useState<CrmRecord[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [saved, setSaved] = useState<ViewState[]>([]);
-  const [activeId, setActiveId] = useState(DEFAULT_VIEW.id);
-  const [view, setView] = useState<ViewState>(DEFAULT_VIEW);
+  const [activeId, setActiveId] = useState(initialViewId ?? DEFAULT_VIEW.id);
+  const [view, setView] = useState<ViewState>(PRESET_VIEWS.find((v) => v.id === initialViewId) ?? DEFAULT_VIEW);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null);
   const [showColumns, setShowColumns] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState("");
+  const columnsRef = useRef<HTMLDivElement>(null);
+  const { confirm, prompt, dialogs } = useDialogs();
 
-  const flash = useCallback((msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast((t) => (t === msg ? "" : t)), 4000);
+  const flash = useCallback((text: string, error = false) => {
+    setToast({ text, error });
+    window.setTimeout(() => setToast((t) => (t?.text === text ? null : t)), 5000);
   }, []);
 
   const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/crm/records", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? res.statusText);
-      setRecords(Array.isArray(data.records) ? data.records : []);
-      setTruncated(Boolean(data.truncated));
+    const r = await sendJson("/api/crm/records", "GET");
+    if (r.ok) {
+      setRecords(Array.isArray(r.data.records) ? (r.data.records as CrmRecord[]) : []);
+      setTruncated(Boolean(r.data.truncated));
       setLoadError("");
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Could not load records");
-    } finally {
-      setLoading(false);
-    }
+    } else setLoadError(String(r.data.error));
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -80,7 +87,7 @@ export default function Workspace() {
       await Promise.resolve();
       if (cancelled) return;
       const s = loadSavedViews();
-      const id = loadActiveViewId();
+      const id = initialViewId ?? loadActiveViewId();
       const v = allViews(s).find((x) => x.id === id) ?? DEFAULT_VIEW;
       setSaved(s);
       setActiveId(v.id);
@@ -90,14 +97,30 @@ export default function Workspace() {
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [load, initialViewId]);
+
+  // Columns menu: Esc or a click outside closes it.
+  useEffect(() => {
+    if (!showColumns) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setShowColumns(false);
+    const onClick = (e: MouseEvent) => {
+      if (columnsRef.current && !columnsRef.current.contains(e.target as Node)) setShowColumns(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [showColumns]);
 
   const views = useMemo(() => allViews(saved), [saved]);
   const stored = views.find((v) => v.id === activeId) ?? DEFAULT_VIEW;
   const dirty = JSON.stringify({ ...stored, name: "" }) !== JSON.stringify({ ...view, name: "" });
 
   const customKeys = useMemo(() => customFieldKeys(records), [records]);
-  const fields = useMemo<FieldDef[]>(() => [...CORE_FIELDS, ...customKeys.map(customFieldDef)], [customKeys]);
+  const labels = useMemo(() => Object.assign({}, ...records.map((r) => r.custom_labels ?? {})) as Record<string, string>, [records]);
+  const fields = useMemo<FieldDef[]>(() => [...CORE_FIELDS, ...customKeys.map((k) => customFieldDefLabeled(k, labels))], [customKeys, labels]);
   const visible = fields.filter((f) => !view.hidden.includes(f.key));
   const rows = useMemo(() => applyView(records, view), [records, view]);
   const stats = useMemo(() => summarize(rows), [rows]);
@@ -110,16 +133,16 @@ export default function Workspace() {
     storeActiveViewId(v.id);
   }
 
-  function saveView(asNew: boolean) {
+  async function saveView(asNew: boolean) {
     if (asNew || isPreset(activeId)) {
-      const name = window.prompt("Name this view", view.name === stored.name ? `${view.name} (copy)` : view.name)?.trim();
+      const name = await prompt({ title: "Save this view", label: "View name", initial: view.name === stored.name ? `${view.name} (copy)` : view.name, confirmLabel: "Save view" });
       if (!name) return;
       const v = { ...view, id: newViewId(), name: name.slice(0, 60) };
       const next = [...saved, v];
       setSaved(next);
       storeSavedViews(next);
       switchView(v);
-      flash(`Saved view "${v.name}" in this browser.`);
+      flash(`Saved "${v.name}". Saved views live in this browser for now.`);
     } else {
       const next = saved.map((s) => (s.id === activeId ? { ...view } : s));
       setSaved(next);
@@ -128,9 +151,9 @@ export default function Workspace() {
     }
   }
 
-  function deleteView() {
+  async function deleteView() {
     if (isPreset(activeId)) return;
-    if (!window.confirm(`Delete the view "${stored.name}"?`)) return;
+    if (!(await confirm({ title: "Delete this view?", body: `"${stored.name}" will be removed. Your leads aren't affected.`, confirmLabel: "Delete view", danger: true }))) return;
     const next = saved.filter((s) => s.id !== activeId);
     setSaved(next);
     storeSavedViews(next);
@@ -141,19 +164,14 @@ export default function Workspace() {
     async (record: CrmRecord, field: FieldDef, value: string): Promise<boolean> => {
       const before = record;
       setRecords((rs) => rs.map((r) => (r.id === record.id ? optimistic(r, field, value) : r)));
-      const res = await fetch(`/api/crm/records/${record.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...patchBodyFor(field, value), expectedUpdated: record.updated_date }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setRecords((rs) => rs.map((r) => (r.id === record.id ? before : r)));
-        flash(data.errors?.join("; ") ?? data.error ?? "Save failed");
-        if (res.status === 409) await load();
+      const r = await sendJson(`/api/crm/records/${record.id}`, "PATCH", { ...patchBodyFor(field, value), expectedUpdated: record.updated_date });
+      if (!r.ok) {
+        setRecords((rs) => rs.map((x) => (x.id === record.id ? before : x)));
+        flash(String(r.data.error), true);
+        if (r.status === 409) await load();
         return false;
       }
-      setRecords((rs) => rs.map((r) => (r.id === record.id ? { ...r, updated_date: data.updated_date ?? r.updated_date } : r)));
+      setRecords((rs) => rs.map((x) => (x.id === record.id ? { ...x, updated_date: String(r.data.updated_date ?? x.updated_date) } : x)));
       return true;
     },
     [flash, load],
@@ -164,35 +182,55 @@ export default function Workspace() {
     if (!r || r.stage === stage) return;
     const field = CORE_FIELDS.find((f) => f.key === "stage")!;
     const ok = await saveField(r, field, stage);
-    if (ok) flash(`${displayName(r)} → ${STAGES.find((s) => s.key === stage)?.label}`);
+    if (ok) flash(`${displayName(r)} moved to ${STAGES.find((s) => s.key === stage)?.label}.`);
   }
 
-  async function bulk(patch: Record<string, unknown>, label: string) {
+  async function runBulk(label: string, body: Record<string, unknown>) {
     const ids = [...selected];
     if (ids.length === 0) return;
-    const res = await fetch("/api/crm/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids, patch }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      flash(data.errors?.join("; ") ?? data.error ?? "Bulk update failed");
-      return;
-    }
-    flash(`${label}: ${data.updated} updated${data.failed?.length ? `, ${data.failed.length} failed` : ""}.`);
+    setBulkBusy(label);
+    const r = await sendJson("/api/crm/bulk", "POST", { ids, ...body });
+    setBulkBusy("");
+    if (!r.ok) return flash(String(r.data.error), true);
+    const failed = Array.isArray(r.data.failed) ? r.data.failed.length : Number(r.data.notFound ?? 0);
+    const done = Number(r.data.updated ?? r.data.deleted ?? 0);
+    flash(`${label}: ${done} lead(s)${failed ? `, ${failed} couldn't be changed` : ""}.`, failed > 0);
     setSelected(new Set());
     await load();
   }
 
+  async function bulkOwner() {
+    const owner = await prompt({ title: "Set owner", label: "Owner (email or name)", confirmLabel: "Set owner" });
+    if (owner) runBulk("Owner set", { patch: { assigned_to: owner } });
+  }
+  async function bulkFollowUp() {
+    const date = await prompt({ title: "Set follow up date", label: "Follow up date", type: "date", confirmLabel: "Set date" });
+    if (date) runBulk("Follow up set", { patch: { next_follow_up: date } });
+  }
+  async function bulkTag() {
+    const tags = await prompt({ title: "Add a tag", label: "Tag (use commas for more than one)", confirmLabel: "Add tag" });
+    if (tags) runBulk("Tag added", { action: "add_tags", tags: tags.split(",") });
+  }
+  async function bulkDelete() {
+    const n = selected.size;
+    const ok = await confirm({
+      title: `Delete ${n} lead${n === 1 ? "" : "s"}?`,
+      body: "They'll be removed from Leads, exports and every campaign's recipients. This is logged.",
+      confirmLabel: `Delete ${n} lead${n === 1 ? "" : "s"}`,
+      danger: true,
+    });
+    if (ok) runBulk("Deleted", { action: "delete" });
+  }
+
   function exportCsv() {
-    const blob = new Blob([toCsv(rows, visible)], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
+    // Server export: every field when all columns are shown, dates in your time zone.
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const params = new URLSearchParams({ tz });
+    if (view.hidden.length > 0) params.set("columns", visible.map((f) => f.key).join(","));
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `leaddaddy-${view.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.href = `/api/crm/export?${params.toString()}`; // a file download, not a page
+    a.download = "";
     a.click();
-    URL.revokeObjectURL(url);
   }
 
   function setFilter(i: number, f: Filter | null) {
@@ -205,36 +243,33 @@ export default function Workspace() {
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
 
   return (
-    <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-8">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="mb-1 text-xs text-neutral-500">
-            <Link href="/" className="hover:text-neutral-300">Console</Link> / CRM
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Leads workspace</h1>
-        </div>
-        <dl className="grid grid-cols-3 gap-x-6 gap-y-1 text-sm sm:grid-cols-5">
-          {[
-            ["In view", stats.count.toLocaleString()],
-            ["Open pipeline", money(stats.openValue)],
-            ["Won", money(stats.wonValue)],
-            ["Valid emails", stats.validEmails.toLocaleString()],
-            ["Follow-ups due", stats.followUpsDue.toLocaleString()],
-          ].map(([k, v]) => (
-            <div key={k}>
-              <dt className="text-xs text-neutral-500">{k}</dt>
-              <dd className="font-semibold tabular-nums">{v}</dd>
-            </div>
-          ))}
-        </dl>
-      </header>
+    <PageBody wide>
+      <PageHeader
+        title={title}
+        actions={<button className={btn} onClick={exportCsv} disabled={records.length === 0}>Export CSV</button>}
+      />
 
-      <nav className="mb-3 flex gap-1 overflow-x-auto border-b border-neutral-800" aria-label="Views">
+      <dl className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {[
+          ["In view", stats.count.toLocaleString()],
+          ["Open pipeline", money(stats.openValue) || "$0"],
+          ["Won", money(stats.wonValue) || "$0"],
+          ["Consent on file", stats.consented.toLocaleString()],
+          ["Follow ups due", stats.followUpsDue.toLocaleString()],
+        ].map(([k, v]) => (
+          <div key={k} className={`${card} px-4 py-3`}>
+            <dt className="text-xs font-medium text-slate-500">{k}</dt>
+            <dd className="mt-0.5 text-lg font-semibold tabular-nums">{v}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <nav className="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200" aria-label="Views">
         {views.map((v) => (
           <button
             key={v.id}
             onClick={() => switchView(v)}
-            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${v.id === activeId ? "border-neutral-100 text-white" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
+            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${v.id === activeId ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
           >
             {v.name}
           </button>
@@ -246,19 +281,19 @@ export default function Workspace() {
           value={view.search}
           onChange={(e) => setView({ ...view, search: e.target.value })}
           placeholder="Search name, company, email, tags…"
-          className={`${inputCls} w-full sm:w-72`}
-          aria-label="Search records"
+          className={`${input} w-full sm:w-72`}
+          aria-label="Search leads"
         />
-        <div className="flex rounded-lg border border-neutral-700 p-0.5 text-sm" role="group" aria-label="Layout">
+        <div className="flex rounded-lg border border-slate-300 bg-white p-0.5 text-sm" role="group" aria-label="Layout">
           {(["table", "kanban"] as const).map((m) => (
-            <button key={m} onClick={() => setView({ ...view, mode: m })} className={`rounded-md px-2.5 py-1 ${view.mode === m ? "bg-neutral-800 text-white" : "text-neutral-400"}`}>
+            <button key={m} onClick={() => setView({ ...view, mode: m })} aria-pressed={view.mode === m} className={`rounded-md px-3 py-1.5 font-medium ${view.mode === m ? "bg-indigo-50 text-indigo-700" : "text-slate-500"}`}>
               {m === "table" ? "Table" : "Board"}
             </button>
           ))}
         </div>
-        <button className={btnCls} onClick={() => setView({ ...view, filters: [...view.filters, { field: "stage", op: "is", value: "new" }] })}>+ Filter</button>
+        <button className={btn} onClick={() => setView({ ...view, filters: [...view.filters, { field: "stage", op: "is", value: "new" }] })}>Add filter</button>
         <select
-          className={inputCls}
+          className={input}
           aria-label="Sort by"
           value={view.sort[0] ? `${view.sort[0].field}:${view.sort[0].dir}` : ""}
           onChange={(e) => {
@@ -273,19 +308,17 @@ export default function Workspace() {
           ])}
         </select>
         {view.mode === "table" && (
-          <div className="relative">
-            <button className={btnCls} onClick={() => setShowColumns((s) => !s)} aria-expanded={showColumns}>Columns</button>
+          <div className="relative" ref={columnsRef}>
+            <button className={btn} onClick={() => setShowColumns((s) => !s)} aria-expanded={showColumns} aria-haspopup="true">Columns</button>
             {showColumns && (
-              <div className="absolute z-20 mt-1 max-h-80 w-56 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-950 p-2 shadow-xl">
+              <div className="absolute z-20 mt-1 max-h-80 w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
                 {fields.filter((f) => f.key !== "name").map((f) => (
-                  <label key={f.key} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-neutral-900">
+                  <label key={f.key} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
                     <input
                       type="checkbox"
-                      className="accent-neutral-100"
+                      className="accent-indigo-600"
                       checked={!view.hidden.includes(f.key)}
-                      onChange={(e) =>
-                        setView({ ...view, hidden: e.target.checked ? view.hidden.filter((h) => h !== f.key) : [...view.hidden, f.key] })
-                      }
+                      onChange={(e) => setView({ ...view, hidden: e.target.checked ? view.hidden.filter((h) => h !== f.key) : [...view.hidden, f.key] })}
                     />
                     {f.label}
                   </label>
@@ -294,12 +327,11 @@ export default function Workspace() {
             )}
           </div>
         )}
-        <div className="ml-auto flex flex-wrap gap-2">
-          {dirty && <button className={btnPrimaryCls} onClick={() => saveView(false)}>{isPreset(activeId) ? "Save as view" : "Save view"}</button>}
-          {dirty && <button className={btnCls} onClick={() => switchView(stored)}>Reset</button>}
-          {!isPreset(activeId) && <button className={btnCls} onClick={() => saveView(true)}>Duplicate</button>}
-          {!isPreset(activeId) && <button className={btnCls} onClick={deleteView}>Delete view</button>}
-          <button className={btnCls} onClick={exportCsv} disabled={rows.length === 0}>Export CSV</button>
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
+          {dirty && <button className={btnPrimary} onClick={() => saveView(false)}>{isPreset(activeId) ? "Save as view" : "Save view"}</button>}
+          {dirty && <button className={btn} onClick={() => switchView(stored)}>Reset</button>}
+          {!isPreset(activeId) && <button className={btn} onClick={() => saveView(true)}>Duplicate</button>}
+          {!isPreset(activeId) && <button className={btn} onClick={deleteView}>Delete view</button>}
         </div>
       </div>
 
@@ -308,22 +340,22 @@ export default function Workspace() {
           {view.filters.map((f, i) => {
             const op = FILTER_OPS.find((o) => o.op === f.op);
             return (
-              <div key={i} className="flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-950 p-1">
-                <select className={`${inputCls} py-1`} value={f.field} onChange={(e) => setFilter(i, { ...f, field: e.target.value })} aria-label="Filter field">
+              <div key={i} className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+                <select className={`${input} py-1`} value={f.field} onChange={(e) => setFilter(i, { ...f, field: e.target.value, value: freshFilterValue(e.target.value) })} aria-label="Filter field">
                   {fields.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
                 </select>
-                <select className={`${inputCls} py-1`} value={f.op} onChange={(e) => setFilter(i, { ...f, op: e.target.value as Filter["op"] })} aria-label="Filter operator">
+                <select className={`${input} py-1`} value={f.op} onChange={(e) => setFilter(i, { ...f, op: e.target.value as Filter["op"] })} aria-label="Filter operator">
                   {FILTER_OPS.map((o) => <option key={o.op} value={o.op}>{o.label}</option>)}
                 </select>
                 {op?.needsValue &&
                   (f.field === "stage" ? (
-                    <select className={`${inputCls} py-1`} value={f.value ?? ""} onChange={(e) => setFilter(i, { ...f, value: e.target.value })} aria-label="Filter value">
+                    <select className={`${input} py-1`} value={f.value ?? ""} onChange={(e) => setFilter(i, { ...f, value: e.target.value })} aria-label="Filter value">
                       {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                     </select>
                   ) : (
-                    <input className={`${inputCls} w-32 py-1`} value={f.value ?? ""} onChange={(e) => setFilter(i, { ...f, value: e.target.value })} aria-label="Filter value" />
+                    <input className={`${input} w-32 py-1`} value={f.value ?? ""} onChange={(e) => setFilter(i, { ...f, value: e.target.value })} aria-label="Filter value" />
                   ))}
-                <button onClick={() => setFilter(i, null)} className="px-1.5 text-neutral-500 hover:text-white" aria-label="Remove filter">×</button>
+                <button onClick={() => setFilter(i, null)} className="px-2 text-slate-400 hover:text-slate-800" aria-label="Remove filter">×</button>
               </div>
             );
           })}
@@ -331,13 +363,14 @@ export default function Workspace() {
       )}
 
       {selected.size > 0 && (
-        <div className="sticky top-2 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-sm backdrop-blur">
-          <span className="font-medium">{selected.size} selected</span>
+        <div className="sticky top-16 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/95 px-3 py-2 text-sm backdrop-blur lg:top-2">
+          <span className="font-semibold text-indigo-900">{selected.size} selected</span>
           <select
-            className={`${inputCls} py-1`}
+            className={`${input} py-1.5`}
             defaultValue=""
+            disabled={Boolean(bulkBusy)}
             onChange={(e) => {
-              if (e.target.value) bulk({ stage: e.target.value }, "Stage changed");
+              if (e.target.value) runBulk("Stage changed", { patch: { stage: e.target.value } });
               e.target.value = "";
             }}
             aria-label="Move selected to stage"
@@ -345,43 +378,45 @@ export default function Workspace() {
             <option value="">Move to stage…</option>
             {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
-          <button className={btnCls} onClick={() => { const t = window.prompt("Set owner (email or name)")?.trim(); if (t !== undefined) bulk({ assigned_to: t }, "Owner set"); }}>Set owner</button>
-          <button className={btnCls} onClick={() => { const d = window.prompt("Follow-up date (YYYY-MM-DD)")?.trim(); if (d) bulk({ next_follow_up: d }, "Follow-up set"); }}>Set follow-up</button>
-          <button className="ml-auto text-neutral-400 hover:text-white" onClick={() => setSelected(new Set())}>Clear</button>
+          <button className={btn} disabled={Boolean(bulkBusy)} onClick={bulkTag}>Add tag</button>
+          <button className={btn} disabled={Boolean(bulkBusy)} onClick={bulkOwner}>Set owner</button>
+          <button className={btn} disabled={Boolean(bulkBusy)} onClick={bulkFollowUp}>Set follow up</button>
+          <button className={btnDanger} disabled={Boolean(bulkBusy)} onClick={bulkDelete}>Delete</button>
+          {bulkBusy && <span className="text-indigo-800">Working…</span>}
+          <button className="ml-auto font-medium text-slate-600 hover:text-slate-900" onClick={() => setSelected(new Set())}>Clear</button>
         </div>
       )}
 
-      {toast && <div role="status" className="fixed bottom-4 right-4 z-30 max-w-sm rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm shadow-xl">{toast}</div>}
+      {toast && (
+        <div role={toast.error ? "alert" : "status"} className={`fixed bottom-4 left-4 right-4 z-30 rounded-lg px-4 py-3 text-sm shadow-lg sm:left-auto sm:max-w-sm ${toast.error ? "bg-red-700 text-white" : "bg-slate-900 text-white"}`}>
+          {toast.text}
+        </div>
+      )}
+      {dialogs}
 
       {loading ? (
-        <div className="rounded-xl border border-neutral-800 p-10 text-center text-sm text-neutral-500">Loading records…</div>
+        <div className={`${card} p-10 text-center text-sm text-slate-500`}>Loading leads…</div>
       ) : loadError ? (
-        <div className="rounded-xl border border-red-900 bg-red-950/30 p-6 text-sm text-red-300">
-          Could not load records: {loadError} <button onClick={load} className="ml-2 underline">Retry</button>
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-800">
+          Leads didn&apos;t load: {loadError} <button onClick={load} className="ml-2 font-semibold underline">Retry</button>
         </div>
       ) : records.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-800 p-10 text-center">
-          <p className="mb-1 font-medium">No leads yet</p>
-          <p className="text-sm text-neutral-500">Add, import, scrape or capture leads from the <Link href="/" className="underline">console</Link>; they appear here instantly.</p>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
+          <p className="mb-1 font-semibold">No leads yet</p>
+          <p className="text-sm text-slate-500">Add, import or scrape leads from <Link href="/" className="font-medium text-indigo-600 underline">Home</Link>. They show up here right away.</p>
         </div>
       ) : view.mode === "table" ? (
-        <div className="overflow-x-auto rounded-xl border border-neutral-800">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead className="bg-neutral-950 text-left text-xs uppercase tracking-wide text-neutral-500">
+        <div className={`${card} overflow-x-auto`}>
+          <table className="w-full min-w-[900px] table-fixed text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="w-8 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    className="accent-neutral-100"
-                    checked={allSelected}
-                    onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
-                    aria-label="Select all in view"
-                  />
+                <th className="w-10 px-3 py-3">
+                  <input type="checkbox" className="accent-indigo-600" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))} aria-label="Select all in view" />
                 </th>
                 {visible.map((f) => (
-                  <th key={f.key} className="whitespace-nowrap px-3 py-2 font-medium">
+                  <th key={f.key} className={`whitespace-nowrap px-3 py-3 ${f.key === "name" ? "w-48" : "w-36"}`}>
                     <button
-                      className="hover:text-neutral-200"
+                      className="hover:text-slate-800"
                       onClick={() => setView({ ...view, sort: [{ field: f.key, dir: view.sort[0]?.field === f.key && view.sort[0].dir === "asc" ? "desc" : "asc" }] })}
                     >
                       {f.label}
@@ -393,11 +428,11 @@ export default function Workspace() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className={`border-t border-neutral-800/80 hover:bg-neutral-950 ${selected.has(r.id) ? "bg-neutral-900/60" : ""}`}>
-                  <td className="px-3 py-1.5">
+                <tr key={r.id} className={`border-t border-slate-100 hover:bg-slate-50 ${selected.has(r.id) ? "bg-indigo-50/60" : ""}`}>
+                  <td className="px-3 py-2.5">
                     <input
                       type="checkbox"
-                      className="accent-neutral-100"
+                      className="accent-indigo-600"
                       checked={selected.has(r.id)}
                       onChange={() => {
                         const next = new Set(selected);
@@ -409,9 +444,9 @@ export default function Workspace() {
                     />
                   </td>
                   {visible.map((f) => (
-                    <td key={f.key} className="max-w-[240px] px-3 py-1.5 align-middle">
+                    <td key={f.key} className="overflow-hidden px-3 py-2.5 align-middle">
                       {f.key === "name" ? (
-                        <Link href={`/crm/${r.id}`} className="font-medium text-neutral-100 hover:underline">{displayName(r)}</Link>
+                        <Link href={`/crm/${r.id}`} className="block truncate font-medium text-slate-900 hover:text-indigo-700 hover:underline" title={displayName(r)}>{displayName(r)}</Link>
                       ) : (
                         <EditableCell record={r} field={f} onSave={(field, value) => saveField(r, field, value)} />
                       )}
@@ -421,7 +456,7 @@ export default function Workspace() {
               ))}
             </tbody>
           </table>
-          {rows.length === 0 && <p className="p-6 text-center text-sm text-neutral-500">No records match this view.</p>}
+          {rows.length === 0 && <p className="p-6 text-center text-sm text-slate-500">No leads match this view.</p>}
         </div>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-4">
@@ -438,16 +473,16 @@ export default function Workspace() {
                   if (id) moveStage(id, s.key);
                   setDragId(null);
                 }}
-                className="flex w-72 shrink-0 flex-col rounded-xl border border-neutral-800 bg-neutral-950/60"
+                className="flex w-72 shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-100/70"
                 aria-label={`${s.label} column`}
               >
-                <header className="flex items-center justify-between border-b border-neutral-800 px-3 py-2 text-sm">
-                  <span className="flex items-center gap-2 font-medium">
+                <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2.5 text-sm">
+                  <span className="flex items-center gap-2 font-semibold">
                     <span className={`h-2 w-2 rounded-full ${STAGE_STYLES[s.key].dot}`} />
                     {s.label}
-                    <span className="text-neutral-500">{items.length}</span>
+                    <span className="font-normal text-slate-500">{items.length}</span>
                   </span>
-                  <span className="text-xs tabular-nums text-neutral-500">{money(total)}</span>
+                  <span className="text-xs tabular-nums text-slate-500">{money(total)}</span>
                 </header>
                 <div className="flex min-h-24 flex-col gap-2 p-2">
                   {items.map((r) => (
@@ -458,23 +493,21 @@ export default function Workspace() {
                         e.dataTransfer.setData("text/plain", r.id);
                         setDragId(r.id);
                       }}
-                      className={`cursor-grab rounded-lg border border-neutral-800 bg-neutral-900 p-2.5 text-sm hover:border-neutral-600 active:cursor-grabbing ${dragId === r.id ? "opacity-50" : ""}`}
+                      className={`cursor-grab rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm hover:border-slate-300 active:cursor-grabbing ${dragId === r.id ? "opacity-50" : ""}`}
                     >
-                      <Link href={`/crm/${r.id}`} className="font-medium hover:underline">{displayName(r)}</Link>
-                      {(r.company || r.job_title) && <div className="truncate text-xs text-neutral-400">{[r.job_title, r.company].filter(Boolean).join(" · ")}</div>}
-                      <div className="mt-2 flex items-center justify-between text-xs text-neutral-500">
-                        <span className="tabular-nums">{money(r.estimated_value) || "—"}</span>
-                        <span className="flex items-center gap-2">
-                          {r.lead_score !== null && <span title="Lead score">★ {r.lead_score}</span>}
-                          <select
-                            value={r.stage}
-                            onChange={(e) => moveStage(r.id, e.target.value as StageKey)}
-                            className="rounded bg-transparent text-neutral-400 outline-none hover:text-white"
-                            aria-label={`Move ${displayName(r)} to stage`}
-                          >
-                            {STAGES.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
-                          </select>
-                        </span>
+                      <Link href={`/crm/${r.id}`} className="block truncate font-medium hover:text-indigo-700 hover:underline">{displayName(r)}</Link>
+                      {(r.company || r.job_title) && <div className="truncate text-xs text-slate-500">{[r.job_title, r.company].filter(Boolean).join(" · ")}</div>}
+                      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                        <span className="tabular-nums">{money(r.estimated_value) || "No value"}</span>
+                        {/* Works on touch screens where dragging doesn't. */}
+                        <select
+                          value={r.stage}
+                          onChange={(e) => moveStage(r.id, e.target.value as StageKey)}
+                          className="rounded border border-slate-200 bg-white px-1 py-0.5 text-slate-600"
+                          aria-label={`Move ${displayName(r)} to stage`}
+                        >
+                          {STAGES.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+                        </select>
                       </div>
                     </article>
                   ))}
@@ -484,7 +517,7 @@ export default function Workspace() {
           })}
         </div>
       )}
-      {truncated && <p className="mt-3 text-xs text-amber-400">Showing the 2,000 most recently updated records; older records are not loaded in this workspace yet.</p>}
-    </main>
+      {truncated && <p className="mt-3 text-xs text-amber-700">Showing the 2,000 most recently updated leads. Older leads aren&apos;t loaded here yet.</p>}
+    </PageBody>
   );
 }

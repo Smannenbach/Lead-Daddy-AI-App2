@@ -1,6 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/** Signed-in app pages (sidebar). Each must also be in config.matcher below. */
+export const APP_PAGES = ["/crm", "/pipeline", "/campaigns", "/import", "/scraper", "/settings"];
+
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -24,8 +27,11 @@ export async function proxy(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
   const isProtected =
-    request.nextUrl.pathname === "/" ||
+    path === "/" ||
+    APP_PAGES.some((p) => path === p || path.startsWith(`${p}/`)) ||
+    path.startsWith("/api/verify") ||
     request.nextUrl.pathname.startsWith("/crm") ||
     request.nextUrl.pathname.startsWith("/api/crm") ||
     request.nextUrl.pathname.startsWith("/api/leads") ||
@@ -54,5 +60,20 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/crm/:path*", "/api/crm/:path*", "/api/leads/:path*", "/api/scrape", "/api/social/:path*", "/api/ai"],
+  matcher: [
+    "/",
+    "/login",
+    "/crm/:path*",
+    "/pipeline/:path*",
+    "/campaigns/:path*",
+    "/import/:path*",
+    "/scraper/:path*",
+    "/settings/:path*",
+    "/api/crm/:path*",
+    "/api/leads/:path*",
+    "/api/scrape",
+    "/api/social/:path*",
+    "/api/ai",
+    "/api/verify/:path*",
+  ],
 };

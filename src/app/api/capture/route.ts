@@ -113,6 +113,8 @@ async function mirrorToCrm(
     ].filter(Boolean).join(" "),
   };
   const finance = p.message ? { financing_need: p.message } : {};
+  // Shown on the lead as the question the person answered.
+  const financeLabel = p.message ? { financing_need: "What are you looking to finance?" } : {};
 
   const { data: existing } = await db
     .from("crm_contact")
@@ -139,7 +141,12 @@ async function mirrorToCrm(
     const { error } = await db
       .from("crm_contact")
       .update({
-        custom_fields: { ...cf, ...grant, crm_fields: { ...crmFields, ...finance } },
+        custom_fields: {
+          ...cf,
+          ...grant,
+          crm_fields: { ...crmFields, ...finance },
+          crm_field_labels: { ...((cf.crm_field_labels ?? {}) as Record<string, unknown>), ...financeLabel },
+        },
         engagement_history: [...history, activity].slice(-200),
       })
       .eq("id", existing.id);
@@ -160,6 +167,7 @@ async function mirrorToCrm(
       consent_record: consentRecord({ granted: p.consent, method: "web_form", source: pageUrl ?? "web form", wordingVersion: "bfcm-form-2026-11", at: now }),
       unified_lead_id: unifiedLeadId,
       crm_fields: finance,
+      crm_field_labels: financeLabel,
     },
     engagement_history: [activity],
     lead_source: "bfcm-landing",

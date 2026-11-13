@@ -18,11 +18,11 @@ export function CellDisplay({ record, field }: { record: CrmRecord; field: Field
   if (field.type === "currency") return <span className="tabular-nums">{money(Number(v))}</span>;
   if (field.type === "number") return <span className="tabular-nums">{String(v)}</span>;
   if (field.type === "date") return <span>{shortDate(String(v))}</span>;
-  return <span className="truncate">{String(v)}</span>;
+  return <span className="block truncate" title={String(v)}>{String(v)}</span>;
 }
 
 function Empty() {
-  return <span className="text-neutral-700">—</span>;
+  return <span className="text-slate-300">—</span>;
 }
 
 function initialText(record: CrmRecord, field: FieldDef): string {
@@ -63,9 +63,10 @@ export function EditableCell({
       return;
     }
     setSaving(true);
-    const ok = await onSave(field, value);
+    await onSave(field, value);
     setSaving(false);
-    if (ok) setEditing(false);
+    // Close either way: on failure the parent restores the saved value and shows why.
+    setEditing(false);
   }
 
   if (!editing) {
@@ -77,7 +78,7 @@ export function EditableCell({
           setDraft(initialText(record, field));
           setEditing(true);
         }}
-        className="-mx-1 block w-full min-w-0 rounded px-1 py-0.5 text-left hover:bg-neutral-800/70 focus:bg-neutral-800/70 focus:outline-none"
+        className="-mx-1 block w-full min-w-0 overflow-hidden rounded px-1 py-1 text-left hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
         aria-label={`Edit ${field.label}`}
       >
         <CellDisplay record={record} field={field} />
@@ -85,7 +86,7 @@ export function EditableCell({
     );
   }
 
-  const common = "w-full rounded border border-neutral-500 bg-neutral-900 px-1.5 py-0.5 text-sm outline-none";
+  const common = "w-full rounded border border-indigo-400 bg-white px-1.5 py-1 text-sm text-slate-900 outline-none ring-2 ring-indigo-100";
   if (field.type === "stage") {
     return (
       <select

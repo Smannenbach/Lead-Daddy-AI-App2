@@ -97,3 +97,17 @@ describe("delete notes and campaigns", () => {
     expect((await (await campaigns.GET()).json()).campaigns).toEqual([]);
   });
 });
+
+describe("bulk add tag", () => {
+  beforeEach(() => {
+    db = new FakeDb();
+  });
+  it("adds a tag and keeps existing tags", async () => {
+    const a = lead({ tags: ["hot"] });
+    const b = lead({ tags: [] });
+    const res = await bulk.POST(json("POST", { ids: [a.id, b.id], action: "add_tags", tags: ["bfcm"] }));
+    expect(await res.json()).toEqual({ updated: 2, failed: [] });
+    expect(a.tags).toEqual(["hot", "bfcm"]);
+    expect(b.tags).toEqual(["bfcm"]);
+  });
+});

@@ -81,6 +81,7 @@ export const CORE_FIELDS: ReadonlyArray<FieldDef> = [
   { key: "job_title", label: "Title", type: "text", editable: true },
   { key: "email", label: "Email", type: "email", editable: true },
   { key: "phone", label: "Phone", type: "phone", editable: true },
+  { key: "consent", label: "Consent", type: "status", editable: false },
   { key: "stage", label: "Stage", type: "stage", editable: true },
   { key: "lead_score", label: "Score", type: "number", editable: true },
   { key: "estimated_value", label: "Value", type: "currency", editable: true },
@@ -90,7 +91,6 @@ export const CORE_FIELDS: ReadonlyArray<FieldDef> = [
   { key: "lead_source", label: "Source", type: "text", editable: true },
   { key: "email_status", label: "Email status", type: "status", editable: false },
   { key: "phone_status", label: "Phone status", type: "status", editable: false },
-  { key: "consent", label: "TCPA consent", type: "status", editable: false },
   { key: "created_date", label: "Created", type: "date", editable: false },
   { key: "updated_date", label: "Updated", type: "date", editable: false },
 ];

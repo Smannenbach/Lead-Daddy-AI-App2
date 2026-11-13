@@ -1,15 +1,16 @@
 "use client";
 
 import { STAGES, type StageKey } from "@/lib/crm/model";
+export { btn as btnCls, btnPrimary as btnPrimaryCls, input as inputCls } from "@/components/ui/styles";
 
 export const STAGE_STYLES: Record<StageKey, { chip: string; dot: string }> = {
-  new: { chip: "bg-sky-950/70 text-sky-300 ring-sky-800/60", dot: "bg-sky-400" },
-  contacted: { chip: "bg-violet-950/70 text-violet-300 ring-violet-800/60", dot: "bg-violet-400" },
-  qualified: { chip: "bg-amber-950/70 text-amber-300 ring-amber-800/60", dot: "bg-amber-400" },
-  proposal: { chip: "bg-orange-950/70 text-orange-300 ring-orange-800/60", dot: "bg-orange-400" },
-  negotiation: { chip: "bg-pink-950/70 text-pink-300 ring-pink-800/60", dot: "bg-pink-400" },
-  won: { chip: "bg-emerald-950/70 text-emerald-300 ring-emerald-800/60", dot: "bg-emerald-400" },
-  lost: { chip: "bg-neutral-900 text-neutral-400 ring-neutral-700/60", dot: "bg-neutral-500" },
+  new: { chip: "bg-sky-50 text-sky-700 ring-sky-200", dot: "bg-sky-500" },
+  contacted: { chip: "bg-violet-50 text-violet-700 ring-violet-200", dot: "bg-violet-500" },
+  qualified: { chip: "bg-amber-50 text-amber-800 ring-amber-200", dot: "bg-amber-500" },
+  proposal: { chip: "bg-orange-50 text-orange-700 ring-orange-200", dot: "bg-orange-500" },
+  negotiation: { chip: "bg-pink-50 text-pink-700 ring-pink-200", dot: "bg-pink-500" },
+  won: { chip: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "bg-emerald-500" },
+  lost: { chip: "bg-slate-100 text-slate-600 ring-slate-200", dot: "bg-slate-400" },
 };
 
 export function stageLabel(key: StageKey): string {
@@ -19,29 +20,31 @@ export function stageLabel(key: StageKey): string {
 export function StageChip({ stage }: { stage: StageKey }) {
   const s = STAGE_STYLES[stage];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ${s.chip}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${s.chip}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
       {stageLabel(stage)}
     </span>
   );
 }
 
-const STATUS: Record<string, string> = {
-  valid: "text-emerald-300",
-  granted: "text-emerald-300",
-  invalid: "text-red-300",
-  revoked: "text-red-300",
-  risky: "text-amber-300",
-  unknown: "text-neutral-400",
+const STATUS: Record<string, { cls: string; label?: string }> = {
+  valid: { cls: "text-emerald-700" },
+  granted: { cls: "text-emerald-700", label: "on file" },
+  invalid: { cls: "text-red-700" },
+  revoked: { cls: "text-red-700", label: "opted out" },
+  risky: { cls: "text-amber-700" },
+  unknown: { cls: "text-slate-500" },
+  none: { cls: "text-slate-500", label: "none" },
 };
 
 export function StatusText({ value }: { value: string }) {
   const v = (value || "unverified").toLowerCase();
-  return <span className={`text-xs ${STATUS[v] ?? "text-neutral-500"}`}>{v}</span>;
+  const s = STATUS[v];
+  return <span className={`text-xs font-medium ${s?.cls ?? "text-slate-500"}`}>{s?.label ?? v}</span>;
 }
 
 export function Tag({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-md bg-neutral-800/80 px-1.5 py-0.5 text-[11px] text-neutral-300">{children}</span>;
+  return <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">{children}</span>;
 }
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -56,6 +59,13 @@ export function shortDate(iso: string | null | undefined): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 }
 
+/** Exact local time, e.g. "Nov 13, 2026, 7:23 PM". */
+export function exactTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 export function relative(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   if (Number.isNaN(ms)) return iso;
@@ -68,10 +78,3 @@ export function relative(iso: string): string {
   if (d < 30) return `${d}d ago`;
   return shortDate(iso);
 }
-
-export const inputCls =
-  "rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 text-sm outline-none placeholder:text-neutral-600 focus:border-neutral-400";
-export const btnCls =
-  "rounded-lg border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200 hover:border-neutral-500 hover:text-white disabled:opacity-40";
-export const btnPrimaryCls =
-  "rounded-lg bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-900 hover:bg-white disabled:opacity-40";

@@ -66,7 +66,11 @@ export async function previewCampaign(campaign: CampaignRow, db?: Db) {
   const { willReach, skipped } = previewSkips(channels, contacts);
   return {
     campaignId: campaign.id,
+    name: campaign.name,
+    status: campaign.status,
     channels,
+    // The copy that would go out, so it can be read before anything sends.
+    steps: a.sequence.steps.map((st, i) => ({ index: i, channel: st.channel, offsetMinutes: st.offsetMinutes, subject: st.subject ?? null, body: st.body })),
     recipients: a.leadIds.length,
     found: contacts.length,
     missing: a.leadIds.length - contacts.length,
