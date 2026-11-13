@@ -10,7 +10,9 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { checkRate, clientKey } from "@/lib/ratelimit";
 
 const CAPTURE_MESSAGES: Record<string, string> = {
-  missing_contact: "Add an email or phone number so we can reach you.",
+  missing_contact: "Add your email and phone number.",
+  missing_email: "Add your email address.",
+  missing_phone: "Add your phone number.",
   bad_email: "Check your email address.",
   bad_phone: "Check your phone number.",
   too_long: "One of your answers is too long. Shorten it and try again.",
@@ -112,17 +114,32 @@ async function mirrorToCrm(
   };
   const finance = p.message ? { financing_need: p.message } : {};
 
-  const lookup = db.from("crm_contact").select("id, custom_fields, engagement_history").eq("organization_id", org).is("deleted_at", null);
-  const { data: existing } = await (p.email ? lookup.eq("email", p.email) : lookup.eq("phone", p.phone ?? "")).limit(1).maybeSingle();
+  const { data: existing } = await db
+    .from("crm_contact")
+    .select("id, custom_fields, engagement_history")
+    .eq("organization_id", org)
+    .is("deleted_at", null)
+    .eq("email", p.email ?? "")
+    .limit(1)
+    .maybeSingle();
 
   if (existing) {
     const cf = (existing.custom_fields ?? {}) as Record<string, unknown>;
     const crmFields = (cf.crm_fields ?? {}) as Record<string, unknown>;
     const history = Array.isArray(existing.engagement_history) ? existing.engagement_history : [];
+    // A repeat submit can ADD consent (box checked now), but an unchecked box never
+    // removes consent given earlier. Revoking happens only through STOP or a person.
+    const grant =
+      p.consent && cf.tcpa_consent !== "granted"
+        ? {
+            tcpa_consent: "granted",
+            consent_record: consentRecord({ granted: true, method: "web_form", source: pageUrl ?? "web form", wordingVersion: "bfcm-form-2026-11", at: now }),
+          }
+        : {};
     const { error } = await db
       .from("crm_contact")
       .update({
-        custom_fields: { ...cf, crm_fields: { ...crmFields, ...finance } },
+        custom_fields: { ...cf, ...grant, crm_fields: { ...crmFields, ...finance } },
         engagement_history: [...history, activity].slice(-200),
       })
       .eq("id", existing.id);

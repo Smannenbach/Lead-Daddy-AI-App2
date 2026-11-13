@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 function CaptureForm() {
@@ -11,6 +12,7 @@ function CaptureForm() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", message: "", consent: false, website: "" });
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [error, setError] = useState("");
+  const [consentGiven, setConsentGiven] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,20 +33,24 @@ function CaptureForm() {
         utm,
       }),
     });
-    if (res.ok) setState("done");
-    else {
-      const d = await res.json().catch(() => ({}));
-      setError(d.error === "missing_contact" ? "Please provide an email or phone number." : "Something went wrong — try again.");
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setConsentGiven(d.consent?.given === true);
+      setState("done");
+    } else {
+      setError(typeof d.error === "string" ? d.error : "Something went wrong. Try again.");
       setState("error");
     }
   }
 
-  const field = (key: keyof typeof form, label: string, type = "text", required = false) => (
+  const field = (key: keyof typeof form, label: string, type = "text", required = false, maxLength = 200, autoComplete?: string) => (
     <label className="block text-left text-sm">
       <span className="mb-1 block text-neutral-400">{label}{required ? " *" : ""}</span>
       <input
         type={type}
         required={required}
+        maxLength={maxLength}
+        autoComplete={autoComplete}
         value={form[key] as string}
         onChange={(e) => setForm({ ...form, [key]: e.target.value })}
         className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2.5 outline-none focus:border-neutral-500"
@@ -56,8 +62,10 @@ function CaptureForm() {
     return (
       <div className="rounded-2xl border border-emerald-900 bg-emerald-950/40 p-8">
         <h2 className="text-xl font-semibold text-emerald-300">You&apos;re on the list.</h2>
-        <p className="mt-2 text-sm text-neutral-300">
-          We&apos;ll reach out about the Black Friday offer. Prefer to talk now? Call us and mention the BFCM deal.
+        <p className="mt-2 text-sm text-neutral-300" role="status">
+          {consentGiven
+            ? "We got your request and will reach out about the Black Friday offer."
+            : "We got your request. You didn't check the consent box, so we won't call or text you."}
         </p>
       </div>
     );
@@ -65,16 +73,17 @@ function CaptureForm() {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {field("name", "Name", "text", true)}
+      {field("name", "Name", "text", true, 200, "name")}
       <div className="grid gap-4 sm:grid-cols-2">
-        {field("email", "Email", "email")}
-        {field("phone", "Phone")}
+        {field("email", "Email", "email", true, 254, "email")}
+        {field("phone", "Phone", "tel", true, 20, "tel")}
       </div>
-      {field("company", "Company / LLC")}
+      {field("company", "Company / LLC", "text", false, 200, "organization")}
       <label className="block text-left text-sm">
         <span className="mb-1 block text-neutral-400">What are you looking to finance?</span>
         <textarea
           rows={3}
+          maxLength={2000}
           value={form.message}
           onChange={(e) => setForm({ ...form, message: e.target.value })}
           placeholder="e.g. 750k SFR rental in Phoenix, LLC borrower, ~25% down"
@@ -82,6 +91,7 @@ function CaptureForm() {
         />
       </label>
       <label className="flex items-start gap-2 text-left text-xs text-neutral-400">
+        {/* Optional and separate from submitting. Wording is versioned in src/lib/consent.ts. */}
         <input
           type="checkbox"
           checked={form.consent}
@@ -110,7 +120,12 @@ function CaptureForm() {
         {state === "sending" ? "Submitting…" : "Claim the Black Friday deal"}
       </button>
       <p className="text-[11px] text-neutral-500">
-        Business-purpose investment property loans only. We never share your information.
+        Business-purpose investment property loans only.{" "}
+        <Link href="/privacy" className="underline">Privacy Policy</Link> · <Link href="/terms" className="underline">Terms</Link>
+      </p>
+      {/* TODO(legal, Steve): replace with the lender's legal name, NMLS ID and any required disclosures. */}
+      <p className="rounded border border-dashed border-neutral-700 px-3 py-2 text-[11px] text-neutral-500">
+        [LENDER LEGAL NAME] · NMLS ID [NUMBER] · [REQUIRED DISCLOSURES: Steve to add]
       </p>
     </form>
   );

@@ -25,7 +25,7 @@ describe("consent record", () => {
   });
 
   it("public form records method, source, wording version and time", async () => {
-    await capture.POST(new Request("http://x", { method: "POST", headers: { "x-forwarded-for": "10.9.9.1" }, body: JSON.stringify({ name: "Q", email: "q@example.com", consent: true, page_url: "https://app2.leaddaddy.ai/bfcm" }) }));
+    await capture.POST(new Request("http://x", { method: "POST", headers: { "x-forwarded-for": "10.9.9.1" }, body: JSON.stringify({ name: "Q", email: "q@example.com", phone: "602-555-0100", consent: true, page_url: "https://app2.leaddaddy.ai/bfcm" }) }));
     const rec = readConsentRecord(db.table("crm_contact")[0].custom_fields)!;
     expect(rec).toMatchObject({ status: "granted", method: "web_form", source: "https://app2.leaddaddy.ai/bfcm", wording_version: "bfcm-form-2026-11", captured_by: null });
     expect(Date.parse(rec.at)).not.toBeNaN();

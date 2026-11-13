@@ -19,7 +19,7 @@ describe("length limits", () => {
     expect(validateImportRows([{ first_name: "A", email: "a@example.com", company: long(201) }]).skippedRows).toEqual([{ row: 1, reason: "Company can be up to 200 characters." }]);
   });
   it("public form rejects over-long input", () => {
-    expect(validateCapture({ name: "A", email: "a@example.com", company: long(201) })).toEqual({ ok: false, error: "too_long" });
+    expect(validateCapture({ name: "A", email: "a@example.com", phone: "602-555-0100", company: long(201) })).toEqual({ ok: false, error: "too_long" });
   });
   it("notes and custom values have limits too", () => {
     expect(sanitizePatch({ note: long(4001) }).errors).toEqual(["Note can be up to 4000 characters."]);

@@ -30,8 +30,8 @@ describe("every write path rejects 'abc'", () => {
     expect(validateImportRows([{ first_name: "A", phone: "abc" }]).skippedRows).toEqual([{ row: 1, reason: "Phone number isn't valid" }]);
   });
   it("public form", () => {
-    expect(validateCapture({ name: "A", phone: "abc" })).toEqual({ ok: false, error: "bad_phone" });
-    const ok = validateCapture({ name: "A", phone: "602 555 0100" });
+    expect(validateCapture({ name: "A", email: "a@example.com", phone: "abc" })).toEqual({ ok: false, error: "bad_phone" });
+    const ok = validateCapture({ name: "A", email: "a@example.com", phone: "602 555 0100" });
     expect(ok.ok && ok.value.phone).toBe("+16025550100");
   });
 });

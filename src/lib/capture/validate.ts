@@ -24,6 +24,8 @@ export interface CapturePayload {
 export type CaptureError =
   | "honeypot"
   | "missing_contact"
+  | "missing_email"
+  | "missing_phone"
   | "bad_email"
   | "bad_phone"
   | "too_long";
@@ -41,7 +43,9 @@ export function validateCapture(input: CaptureInput): { ok: true; value: Capture
     return { ok: false, error: "too_long" };
   }
 
-  if (!email && !phone) return { ok: false, error: "missing_contact" };
+  // Both are required on the public form (owner decision 2026-11-13). Consent stays optional.
+  if (!email) return { ok: false, error: "missing_email" };
+  if (!phone) return { ok: false, error: "missing_phone" };
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "bad_email" };
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone.ok) return { ok: false, error: "bad_phone" };
