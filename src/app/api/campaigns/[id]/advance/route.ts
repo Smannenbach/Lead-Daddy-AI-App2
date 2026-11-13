@@ -70,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     try {
       if (step.channel === "email" && contact.email) {
-        await sendEmail({ to: contact.email, subject: step.subject ?? "A note from LeadDaddy.ai", html: step.body });
+        await sendEmail({ to: contact.email, subject: step.subject ?? "A note from Lead Daddy", html: step.body });
       } else if (step.channel === "sms" && contact.phone) {
         await sendSms(contact.phone, step.body);
       } else if (step.channel === "call" && contact.phone) {

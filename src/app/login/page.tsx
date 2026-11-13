@@ -76,7 +76,7 @@ export default function LoginPage() {
           <form onSubmit={mode === "password" ? signInWithPassword : sendMagicLink} className="space-y-4">
             <input
               type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@loandaddy.ai" autoComplete="email"
+              placeholder="you@company.com" autoComplete="email"
               className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2.5 text-sm outline-none focus:border-neutral-500"
             />
             {mode === "password" && (

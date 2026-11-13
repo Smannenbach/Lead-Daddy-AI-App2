@@ -32,7 +32,7 @@ describe("verify credits", () => {
     const body = await (await run(lead.id as string, "?dryRun=true")).json();
     expect(body).toMatchObject({ dryRun: true, cost: { emailChecks: 1, phoneChecks: 1, estimatedCredits: null }, emailCreditsRemaining: 42 });
     expect(verifyCalls).toEqual([]); // no provider call
-    expect(String(fetchMock.mock.calls[0][0])).toContain("check-account-balance"); // the only call: the free balance check
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain("check-account-balance"); // the only call: the free balance check
     delete process.env.VERIFY_EMAIL_CREDITS;
   });
 
