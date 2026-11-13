@@ -18,6 +18,8 @@ interface LaunchBody {
   generateCopy?: boolean; // AI-write step bodies via the campaign-writer agent
 }
 
+const LAUNCHABLE = new Set(["draft", "paused", ""]);
+
 /** New campaigns are email only unless the user picks texts or calls on purpose. */
 export const DEFAULT_CHANNELS = ["email"] as const;
 
@@ -210,8 +212,17 @@ export async function PATCH(request: Request) {
     .eq("organization_id", orgId)
     .single();
   if (!campaign) return apiError("not_found", "Campaign not found.", 404);
-  if (campaign.status === "live") {
-    return Response.json({ id: campaign.id, status: "live" }); // idempotent relaunch
+  // Only drafts (or paused campaigns) can launch. Live and Base44 'active' campaigns are
+  // already running; completed and deleted ones are done.
+  const status = (campaign.status ?? "draft").toLowerCase();
+  if (!LAUNCHABLE.has(status)) {
+    const running = status === "live" || status === "active";
+    return apiError(
+      running ? "already_running" : "not_launchable",
+      running ? "This campaign is already running." : "This campaign can't be launched again.",
+      409,
+      { status: campaign.status },
+    );
   }
 
   const audience = (campaign.target_audience ?? {}) as TargetAudience;
