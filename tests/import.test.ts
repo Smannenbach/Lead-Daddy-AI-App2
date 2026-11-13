@@ -33,11 +33,15 @@ describe("validateImportRows", () => {
     ]);
   });
 
-  it("keeps rows with only a first_name (no email)", () => {
-    const { rows, skipped } = validateImportRows([{ first_name: "Madonna" }]);
-    expect(skipped).toBe(0);
-    expect(rows[0].first_name).toBe("Madonna");
-    expect(rows[0].email).toBeNull();
+  it("skips rows with only a first_name: no email and no phone (QA: text file became a lead)", () => {
+    const { rows, skippedRows } = validateImportRows([{ first_name: "Madonna" }]);
+    expect(rows).toEqual([]);
+    expect(skippedRows).toEqual([{ row: 1, reason: "No email or phone" }]);
+  });
+
+  it("keeps a phone-only row", () => {
+    const { rows } = validateImportRows([{ first_name: "Pat", phone: "602-555-0100" }]);
+    expect(rows[0].phone).toBe("+16025550100");
   });
 
   it("skips rows with neither first_name nor email (counted, not error)", () => {
@@ -51,14 +55,14 @@ describe("validateImportRows", () => {
   });
 
   it("skips non-object rows", () => {
-    const { rows, skipped } = validateImportRows(["string", 42, null, ["array"], { first_name: "OK" }]);
+    const { rows, skipped } = validateImportRows(["string", 42, null, ["array"], { first_name: "OK", email: "ok@example.com" }]);
     expect(rows).toHaveLength(1);
     expect(rows[0].first_name).toBe("OK");
     expect(skipped).toBe(4);
   });
 
   it("ignores non-string field values by nulling them", () => {
-    const { rows, skipped } = validateImportRows([{ first_name: "Ada", phone: 12345, company: true }]);
+    const { rows, skipped } = validateImportRows([{ first_name: "Ada", email: "ada@example.com", phone: 12345, company: true }]);
     expect(skipped).toBe(0);
     expect(rows[0].phone).toBeNull();
     expect(rows[0].company).toBeNull();

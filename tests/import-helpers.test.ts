@@ -6,7 +6,7 @@ describe("splitDuplicates", () => {
     const { rows } = validateImportRows([
       { first_name: "Ada", email: " ADA@acme.com " },
       { first_name: "Grace", email: "grace@acme.com" },
-      { first_name: "Mystery" },
+      { first_name: "Mystery", phone: "6025550100" },
     ]);
     const split = splitDuplicates(rows, new Set(["ada@acme.com"]));
     expect(split.fresh.map((r) => r.first_name)).toEqual(["Grace", "Mystery"]);

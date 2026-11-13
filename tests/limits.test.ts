@@ -16,7 +16,7 @@ describe("length limits", () => {
     expect(sanitizePatch({ company: long(LIMITS.company) }).errors).toEqual([]);
   });
   it("CSV import skips over-long rows with the reason", () => {
-    expect(validateImportRows([{ first_name: "A", company: long(201) }]).skippedRows).toEqual([{ row: 1, reason: "Company can be up to 200 characters." }]);
+    expect(validateImportRows([{ first_name: "A", email: "a@example.com", company: long(201) }]).skippedRows).toEqual([{ row: 1, reason: "Company can be up to 200 characters." }]);
   });
   it("public form rejects over-long input", () => {
     expect(validateCapture({ name: "A", email: "a@example.com", company: long(201) })).toEqual({ ok: false, error: "too_long" });

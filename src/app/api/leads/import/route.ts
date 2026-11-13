@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { consentRecord } from "@/lib/consent";
+import { csvToLeadRows } from "@/lib/leads/csv";
 import {
   CSV_LEAD_SOURCE,
   IMPORT_BATCH_SIZE,
@@ -22,12 +23,22 @@ export async function POST(request: Request) {
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
 
-  const body = (await request.json().catch(() => null)) as { rows?: unknown; tcpaConsent?: boolean; hasHeader?: boolean } | null;
-  if (!Array.isArray(body?.rows)) {
-    return Response.json({ error: "rows must be an array" }, { status: 400 });
+  const body = (await request.json().catch(() => null)) as
+    | { rows?: unknown; csv?: unknown; filename?: unknown; tcpaConsent?: boolean; hasHeader?: boolean }
+    | null;
+  // Preferred: send the raw file text as `csv` (+ `filename`) and let the server parse and
+  // validate it. `rows` (already parsed in the browser) still works for older pages.
+  if (body && body.csv !== undefined) {
+    const parsed = csvToLeadRows(body.csv, body.filename);
+    if (!parsed.ok) return Response.json({ code: parsed.code, error: parsed.error }, { status: 400 });
+    body.rows = parsed.rows;
+    body.hasHeader = parsed.hasHeader;
+  }
+  if (!body || !Array.isArray(body.rows)) {
+    return Response.json({ code: "not_csv", error: "Upload a .csv file with your leads." }, { status: 400 });
   }
   if (body.rows.length > MAX_IMPORT_ROWS) {
-    return Response.json({ error: `rows exceeds max of ${MAX_IMPORT_ROWS}` }, { status: 400 });
+    return Response.json({ code: "too_many_rows", error: `Import up to ${MAX_IMPORT_ROWS} leads at a time.` }, { status: 400 });
   }
 
   const db = createServiceClient();

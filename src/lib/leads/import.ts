@@ -42,8 +42,8 @@ export interface NumberedRow extends ImportRow {
 }
 
 /**
- * Validate raw CSV rows. A row is kept when it has a first_name or an
- * email; rows with neither are skipped (counted, not an error), as are
+ * Validate raw CSV rows. A row is kept only when it has an email or a phone
+ * (QA: a text file became a junk lead); other rows are skipped with a reason, as are
  * non-object rows. Non-string field values become null. Unknown extra
  * fields are dropped. Non-array input yields an empty result.
  * `firstRowNumber` is the file line of input[0] (2 when the file has a header).
@@ -64,8 +64,12 @@ export function validateImportRows(
     const r = raw as Record<string, unknown>;
     const firstName = asTrimmedString(r.first_name);
     const email = normalizeEmail(r.email) || null;
-    if (!firstName && !email) {
-      skippedRows.push({ row: rowNumber, reason: "Missing a first name and an email" });
+    if (!email && !asTrimmedString(r.phone)) {
+      skippedRows.push({ row: rowNumber, reason: "No email or phone" });
+      return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      skippedRows.push({ row: rowNumber, reason: "Email isn't valid" });
       return;
     }
     const long = (["first_name", "last_name", "email", "company", "job_title"] as const)

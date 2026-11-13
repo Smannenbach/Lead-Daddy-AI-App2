@@ -47,3 +47,19 @@ describe("POST /api/leads (Add a lead) phone check", () => {
     expect((await res.json()).error).toBe("Enter a valid phone number, like (602) 555-0100.");
   });
 });
+
+describe("POST /api/leads/import with raw csv", () => {
+  beforeEach(() => {
+    db = new FakeDb();
+  });
+  it("rejects a .txt upload and creates nothing", async () => {
+    const res = await post({ csv: "QA TEST text file\nnot a lead", filename: "qa.txt" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("not_csv");
+    expect(db.table("crm_contact")).toHaveLength(0);
+  });
+  it("imports a real csv and reports skipped rows by file line", async () => {
+    const body = await (await post({ csv: "first_name,email,phone\nEcho,echo@example.com,\nNoContact,,\n", filename: "leads.csv" })).json();
+    expect(body).toEqual({ created: 1, skipped: 1, skippedRows: [{ row: 3, reason: "No email or phone" }] });
+  });
+});
