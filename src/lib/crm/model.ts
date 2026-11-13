@@ -285,6 +285,7 @@ export const PRESET_VIEWS: ReadonlyArray<ViewState> = [
     filters: [
       { field: "email_status", op: "is", value: "valid" },
       { field: "stage", op: "is", value: "new" },
+      { field: "consent", op: "is", value: "granted" },
     ],
   },
   {

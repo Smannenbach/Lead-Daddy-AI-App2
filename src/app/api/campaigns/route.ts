@@ -5,6 +5,7 @@ import { sendSms } from "@/lib/channels/twilio";
 import { sendEmail } from "@/lib/channels/email";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
 import type { SequenceState, SequenceStep } from "@/lib/campaigns/sequences";
+import { previewCampaign } from "@/lib/campaigns/recipients";
 
 interface LaunchBody {
   name: string;
@@ -14,6 +15,9 @@ interface LaunchBody {
   brief?: string; // what the campaign is about (used when generateCopy)
   generateCopy?: boolean; // AI-write step bodies via the campaign-writer agent
 }
+
+/** New campaigns are email only unless the user picks texts or calls on purpose. */
+export const DEFAULT_CHANNELS = ["email"] as const;
 
 // Live schema has no campaign_recipients table; recipients, channel sequence and the
 // sequence-runner state live in marketing_campaign.target_audience (jsonb):
@@ -91,7 +95,7 @@ export async function POST(request: Request) {
 
   let steps = body.steps ?? [];
   if (steps.length === 0 && body.generateCopy) {
-    const generated = await generateCampaignSteps(body.name.trim(), body.brief ?? "", asStringArray(body.channelSeq).length > 0 ? asStringArray(body.channelSeq) as ("email" | "sms" | "call")[] : ["email", "sms"]);
+    const generated = await generateCampaignSteps(body.name.trim(), body.brief ?? "", asStringArray(body.channelSeq).length > 0 ? asStringArray(body.channelSeq) as ("email" | "sms" | "call")[] : [...DEFAULT_CHANNELS]);
     if ("error" in generated) return Response.json({ error: generated.error }, { status: 502 });
     steps = generated.steps;
   }
@@ -104,7 +108,7 @@ export async function POST(request: Request) {
       status: "draft",
       target_audience: {
         leadIds: body.leadIds ?? [],
-        channelSeq: body.channelSeq ?? ["email", "sms"],
+        channelSeq: asStringArray(body.channelSeq).length > 0 ? asStringArray(body.channelSeq) : [...DEFAULT_CHANNELS],
         sequence: { steps, launchedAt: null, runs: [] } satisfies SequenceState,
       },
       created_date: now,
@@ -184,7 +188,7 @@ export async function PATCH(request: Request) {
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
 
-  const body = (await request.json().catch(() => null)) as { campaignId?: string; action?: "launch" } | null;
+  const body = (await request.json().catch(() => null)) as { campaignId?: string; action?: "launch"; acknowledgeSkips?: boolean } | null;
   if (body?.action !== "launch" || !body.campaignId) {
     return Response.json({ error: "action=launch and campaignId are required" }, { status: 400 });
   }
@@ -244,6 +248,21 @@ export async function PATCH(request: Request) {
     );
   }
 
+  // Consent gate: texts and calls never go to a lead without consent. The send step
+  // skips them too; this makes the user see and accept that BEFORE anything goes out.
+  const preview = await previewCampaign(campaign);
+  const consentSkips = preview.skipped.filter((s) => s.channel !== "email");
+  if (consentSkips.length > 0 && body.acknowledgeSkips !== true) {
+    return Response.json(
+      {
+        code: "recipients_will_be_skipped",
+        error: `${new Set(consentSkips.map((s) => s.leadId)).size} recipient(s) can't get texts or calls. Review who will be skipped, then launch again to confirm.`,
+        preview,
+      },
+      { status: 409 },
+    );
+  }
+
   const now = new Date().toISOString();
   const prior = (campaign.target_audience ?? {}) as TargetAudience;
   const sequence = (prior.sequence ?? { steps: [], launchedAt: null, runs: [] }) as SequenceState;
@@ -268,29 +287,46 @@ export async function PATCH(request: Request) {
   return Response.json({ id: campaign.id, status: "live", recipients: leadIds.length });
 }
 
-// Direct channel sends (used by the console + future sequence runner)
+// Direct one-off send to ONE existing lead. The address always comes from the lead
+// record (never from the request), texts need consent on file, and opted-out leads
+// are refused. Used by the console; there is no free-form "send to any number" path.
 export async function PUT(request: Request) {
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
 
   const body = (await request.json().catch(() => null)) as
-    | { channel?: "sms" | "email"; to?: string; text?: string; subject?: string; leadId?: string }
+    | { channel?: "sms" | "email"; text?: string; subject?: string; leadId?: string }
     | null;
-  if (!body?.channel || !body.to) return Response.json({ error: "channel and to are required" }, { status: 400 });
+  if ((body?.channel !== "sms" && body?.channel !== "email") || !body.leadId || !body.text?.trim()) {
+    return Response.json({ code: "invalid_request", error: "Pick a lead, a channel and a message." }, { status: 400 });
+  }
+
+  const { data: lead } = await createServiceClient()
+    .from("crm_contact")
+    .select("id, email, phone, custom_fields")
+    .eq("id", body.leadId)
+    .eq("organization_id", organizationId())
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!lead) return Response.json({ code: "not_found", error: "That lead no longer exists." }, { status: 404 });
+
+  const cf = (lead.custom_fields ?? {}) as Record<string, unknown>;
+  const to = body.channel === "sms" ? lead.phone : lead.email;
+  if (!to) return Response.json({ code: "missing_contact", error: `This lead has no ${body.channel === "sms" ? "phone number" : "email"}.` }, { status: 400 });
+  if (body.channel === "sms" && cf.tcpa_consent !== "granted") {
+    return Response.json({ code: "no_consent", error: "This lead hasn't given consent for texts." }, { status: 403 });
+  }
 
   try {
-    if (body.channel === "sms") {
-      await sendSms(body.to, body.text ?? "");
-    } else {
-      await sendEmail({ to: body.to, subject: body.subject ?? "LeadDaddy.ai", html: body.text ?? "" });
-    }
-    await logCampaignEvent("channel_send", `[${body.channel}] to ${body.to}: ${(body.text ?? "").slice(0, 500)}`, {
+    if (body.channel === "sms") await sendSms(to, body.text);
+    else await sendEmail({ to, subject: body.subject ?? "A note from Lead Daddy", html: body.text });
+    await logCampaignEvent("channel_send", `[${body.channel}] to lead ${lead.id}: ${body.text.slice(0, 500)}`, {
       channel: body.channel,
-      to: body.to,
-      leadId: body.leadId ?? null,
+      leadId: lead.id,
     });
     return Response.json({ ok: true });
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "send failed" }, { status: 502 });
+    console.error("[campaigns PUT] send failed", err instanceof Error ? err.message : err);
+    return Response.json({ code: "send_failed", error: "That message didn't send. Try again in a minute." }, { status: 502 });
   }
 }
