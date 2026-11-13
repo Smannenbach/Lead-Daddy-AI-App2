@@ -36,6 +36,11 @@ export async function proxy(request: NextRequest) {
   // (requireUser for users, x-cron-secret for the runner) and the edge runtime
   // cannot read non-NEXT_PUBLIC env vars, so a proxy-level cron bypass can't work.
   if (isProtected && !user) {
+    // API callers get the same 401 JSON every route returns (fetch would otherwise
+    // follow a redirect and get the login page back as a 200). Pages still redirect.
+    if (request.nextUrl.pathname.startsWith("/api/")) {
+      return NextResponse.json({ code: "unauthorized", error: "Your session has expired. Sign in again." }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
