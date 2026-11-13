@@ -116,6 +116,14 @@ function CaptureForm() {
   );
 }
 
+// TODO(legal, owner decision): this page needs wording only you and counsel can supply.
+// Nothing below was written or changed by the QA backend fixes:
+//   * Privacy Policy and Terms links (none on the page today)
+//   * lender name and NMLS ID
+//   * consent text (the checkbox wording) and whether it covers AI voice calls
+//   * the confirmation shown when consent is NOT given (the API now returns
+//     consent.given so the page can show a different message)
+// If the consent text changes, add a new version in src/lib/consent.ts; don't edit the old one.
 export default function BfcmPage() {
   return (
     <main className="min-h-screen bg-neutral-950 px-6 py-16 text-neutral-100">
