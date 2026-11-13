@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { consentRecord } from "@/lib/consent";
+import { normalizePhone } from "@/lib/phone";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
@@ -58,7 +59,9 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | { first_name?: string; last_name?: string; email?: string; phone?: string; company?: string; job_title?: string; tcpaConsent?: boolean }
     | null;
-  if (!body?.first_name?.trim()) return Response.json({ error: "first_name is required" }, { status: 400 });
+  if (!body?.first_name?.trim()) return Response.json({ code: "first_name_required", error: "Add a first name." }, { status: 400 });
+  const phone = normalizePhone(body.phone);
+  if (!phone.ok) return Response.json({ code: "invalid_phone", error: phone.error }, { status: 400 });
 
   const now = new Date().toISOString();
   const db = createServiceClient();
@@ -69,7 +72,7 @@ export async function POST(request: Request) {
       first_name: body.first_name.trim(),
       last_name: body.last_name?.trim() || null,
       email: body.email?.trim().toLowerCase() || null,
-      phone: body.phone?.trim() || null,
+      phone: phone.value,
       company: body.company?.trim() || null,
       job_title: body.job_title?.trim() || null,
       custom_fields: body.tcpaConsent

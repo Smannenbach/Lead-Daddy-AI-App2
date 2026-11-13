@@ -17,11 +17,11 @@ describe("normalizeEmail", () => {
 describe("validateImportRows", () => {
   it("normalizes valid rows and lowercases emails", () => {
     const { rows, skipped } = validateImportRows([
-      { first_name: " Ada ", last_name: "Lovelace", email: " ADA@acme.com ", company: "Acme", job_title: "CTO", phone: " +1 555 " },
+      { first_name: " Ada ", last_name: "Lovelace", email: " ADA@acme.com ", company: "Acme", job_title: "CTO", phone: " (602) 555-0100 " },
     ]);
     expect(skipped).toBe(0);
     expect(rows).toEqual([
-      { rowNumber: 1, first_name: "Ada", last_name: "Lovelace", email: "ada@acme.com", phone: "+1 555", company: "Acme", job_title: "CTO" },
+      { rowNumber: 1, first_name: "Ada", last_name: "Lovelace", email: "ada@acme.com", phone: "+16025550100", company: "Acme", job_title: "CTO" },
     ]);
   });
 

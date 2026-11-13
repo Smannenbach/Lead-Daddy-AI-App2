@@ -38,3 +38,12 @@ describe("POST /api/leads/import", () => {
     expect(db.table("crm_contact")).toHaveLength(2);
   });
 });
+
+describe("POST /api/leads (Add a lead) phone check", () => {
+  it("rejects abc with a plain message", async () => {
+    const leads = await import("@/app/api/leads/route");
+    const res = await leads.POST(new Request("http://x", { method: "POST", body: JSON.stringify({ first_name: "A", phone: "abc" }) }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Enter a valid phone number, like (602) 555-0100.");
+  });
+});

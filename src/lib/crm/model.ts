@@ -10,6 +10,7 @@
 //     (consent is captured only through the add-lead / capture flows that record it).
 
 import { readConsentRecord, type ConsentRecord } from "@/lib/consent";
+import { normalizePhone } from "@/lib/phone";
 
 export type StageKey = "new" | "contacted" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
 
@@ -459,7 +460,7 @@ export interface SanitizedPatch {
   errors: string[];
 }
 
-const TEXT_FIELDS = ["first_name", "last_name", "company", "job_title", "phone", "assigned_to", "lead_source"] as const;
+const TEXT_FIELDS = ["first_name", "last_name", "company", "job_title", "assigned_to", "lead_source"] as const;
 
 function cleanText(v: unknown, max = 200): string | null {
   if (typeof v !== "string" && typeof v !== "number") return null;
@@ -483,6 +484,11 @@ export function sanitizePatch(input: unknown): SanitizedPatch {
   const p = input as PatchInput;
   for (const f of TEXT_FIELDS) if (f in p) out.columns[f] = cleanText(p[f]);
   if ("first_name" in p && !out.columns.first_name) out.errors.push("first_name cannot be empty");
+  if ("phone" in p) {
+    const ph = normalizePhone(p.phone);
+    if (ph.ok) out.columns.phone = ph.value;
+    else out.errors.push(ph.error);
+  }
   if ("email" in p) {
     const e = cleanText(p.email)?.toLowerCase() ?? null;
     if (e !== null && !EMAIL.test(e)) out.errors.push("email is not valid");

@@ -2,6 +2,8 @@
 // normalization, dedupe decisions, and batching. No network, no DB — the
 // route supplies the set of emails that already exist in crm_contact.
 
+import { normalizePhone } from "@/lib/phone";
+
 export const MAX_IMPORT_ROWS = 500;
 export const IMPORT_BATCH_SIZE = 100;
 export const CSV_LEAD_SOURCE = "csv-import";
@@ -65,12 +67,17 @@ export function validateImportRows(
       skippedRows.push({ row: rowNumber, reason: "Missing a first name and an email" });
       return;
     }
+    const phone = normalizePhone(asTrimmedString(r.phone));
+    if (!phone.ok) {
+      skippedRows.push({ row: rowNumber, reason: "Phone number isn't valid" });
+      return;
+    }
     rows.push({
       rowNumber,
       first_name: firstName,
       last_name: asTrimmedString(r.last_name),
       email,
-      phone: asTrimmedString(r.phone),
+      phone: phone.value,
       company: asTrimmedString(r.company),
       job_title: asTrimmedString(r.job_title),
     });

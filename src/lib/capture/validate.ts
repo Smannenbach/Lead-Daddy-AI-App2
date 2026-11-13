@@ -1,4 +1,5 @@
 // Pure validation for the public lead-capture endpoint. No network, no IO.
+import { normalizePhone } from "@/lib/phone";
 
 export interface CaptureInput {
   name?: unknown;
@@ -37,14 +38,15 @@ export function validateCapture(input: CaptureInput): { ok: true; value: Capture
 
   if (!email && !phone) return { ok: false, error: "missing_contact" };
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "bad_email" };
-  if (phone && !/^[+()\-.\s\d]{7,20}$/.test(phone)) return { ok: false, error: "bad_phone" };
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone.ok) return { ok: false, error: "bad_phone" };
 
   return {
     ok: true,
     value: {
       name: name || (email ? email.split("@")[0] : "Visitor"),
       email: email || null,
-      phone: phone || null,
+      phone: normalizedPhone.value,
       message: message || null,
       company: company || null,
       consent: input.consent === true || input.consent === "true",
