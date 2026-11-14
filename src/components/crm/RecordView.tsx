@@ -17,7 +17,9 @@ import {
 import { sendJson } from "@/lib/client/api";
 import { EditableCell } from "@/components/crm/EditableCell";
 import { STAGE_STYLES, StatusText, exactTime, relative } from "@/components/crm/ui";
+import { ArrowLeft, Mail, ShieldCheck, Trash2 } from "lucide-react";
 import { PageBody } from "@/components/app/AppShell";
+import { Spinner, StatusMessage } from "@/components/ui/Status";
 import { useDialogs } from "@/components/ui/Dialog";
 import { btn, btnDanger, btnPrimary, card, cardHeader, h2, input } from "@/components/ui/styles";
 
@@ -52,11 +54,12 @@ function ContactPermission({ record }: { record: CrmRecord }) {
   return (
     <section className={card} aria-labelledby="perm-h">
       <div className={cardHeader}>
-        <h2 id="perm-h" className={h2}>Contact permission</h2>
+        <h2 id="perm-h" className={h2}>Contact Permission</h2>
         <StatusText value={status} />
       </div>
-      <div className="space-y-3 p-4 text-sm">
-        <p className={`rounded-lg px-3 py-2 font-medium ${allowed ? "bg-emerald-50 text-emerald-800" : status === "revoked" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`}>
+      <div className="space-y-3 p-4 text-body">
+        <p className={`flex items-center gap-2 rounded-lg px-3 py-2 font-medium ${allowed ? "bg-emerald-100 text-emerald-800" : status === "revoked" ? "bg-red-50 text-red-700" : "bg-amber-100 text-amber-900"}`}>
+          <ShieldCheck aria-hidden className={`size-4 shrink-0 ${allowed ? "text-emerald-600" : status === "revoked" ? "text-red-500" : "text-amber-500"}`} />
           {allowed
             ? "Campaigns can text and call this lead."
             : status === "revoked"
@@ -163,7 +166,7 @@ export default function RecordView({ id }: { id: string }) {
     const cost = dry.data.cost as { estimatedCredits: number | null };
     const left = dry.data.emailCreditsRemaining as number | null;
     const ok = await confirm({
-      title: "Verify this lead?",
+      title: "Verify This Lead?",
       confirmLabel: "Verify",
       body: (
         <div className="space-y-2">
@@ -191,7 +194,7 @@ export default function RecordView({ id }: { id: string }) {
     const ok = await confirm({
       title: `Delete ${displayName(record)}?`,
       body: "The lead will be removed from Leads, exports and every campaign's recipients. This is logged.",
-      confirmLabel: "Delete lead",
+      confirmLabel: "Delete Lead",
       danger: true,
     });
     if (!ok) return;
@@ -204,7 +207,7 @@ export default function RecordView({ id }: { id: string }) {
 
   async function deleteNote(entry: TimelineEntry) {
     if (!record || !entry.id) return;
-    const ok = await confirm({ title: "Delete this note?", body: <p className="whitespace-pre-wrap">&ldquo;{entry.detail}&rdquo;</p>, confirmLabel: "Delete note", danger: true });
+    const ok = await confirm({ title: "Delete This Note?", body: <p className="whitespace-pre-wrap">&ldquo;{entry.detail}&rdquo;</p>, confirmLabel: "Delete Note", danger: true });
     if (!ok) return;
     const r = await sendJson(`/api/crm/records/${record.id}/notes/${entry.id}`, "DELETE");
     if (!r.ok) return say(String(r.data.error), true);
@@ -229,12 +232,12 @@ export default function RecordView({ id }: { id: string }) {
   if (error) {
     return (
       <PageBody>
-        <Link href="/crm" className="text-sm font-medium text-indigo-600 hover:text-indigo-800">← Back to Leads</Link>
-        <p role="alert" className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>
+        <Link href="/crm" className="inline-flex items-center gap-1.5 text-body font-medium text-indigo-600 hover:text-indigo-700"><ArrowLeft aria-hidden className="size-4" />Back to Leads</Link>
+        <StatusMessage tone="err" className="mt-6">{error}</StatusMessage>
       </PageBody>
     );
   }
-  if (!record) return <PageBody><p className="text-sm text-slate-500">Loading lead…</p></PageBody>;
+  if (!record) return <PageBody><Spinner label="Loading lead…" /></PageBody>;
 
   const labels = record.custom_labels ?? {};
   const formAnswer = record.custom[FORM_ANSWER_KEY];
@@ -245,21 +248,22 @@ export default function RecordView({ id }: { id: string }) {
   return (
     <PageBody>
       {dialogs}
-      <div className="mb-3 text-sm text-slate-500">
-        <Link href="/crm" className="font-medium text-indigo-600 hover:text-indigo-800">Leads</Link> / <span className="text-slate-700">{displayName(record)}</span>
+      <div className="mb-3 text-body text-slate-500">
+        <Link href="/crm" className="font-medium text-indigo-600 hover:text-indigo-700">Leads</Link> / <span className="text-slate-700">{displayName(record)}</span>
       </div>
 
       <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">{displayName(record)}</h1>
-          <p className="truncate text-sm text-slate-500">{[record.job_title, record.company].filter(Boolean).join(" · ") || "No company yet"}</p>
+          <h2 className="truncate text-h1 font-bold">{displayName(record)}</h2>
+          <p className="truncate text-body text-slate-500">{[record.job_title, record.company].filter(Boolean).join(" · ") || "No company yet"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button className={btn} disabled={Boolean(busy) || (!record.email && !record.phone)} onClick={verify}>
-            {busy === "Verifying" ? "Verifying…" : busy === "Checking cost" ? "Checking cost…" : "Verify (uses credits)"}
+            <ShieldCheck aria-hidden />
+            {busy === "Verifying" ? "Verifying…" : busy === "Checking cost" ? "Checking Cost…" : "Verify (Uses Credits)"}
           </button>
-          {record.email && <a className={btn} href={`mailto:${record.email}`}>Email</a>}
-          <button className={btnDanger} disabled={Boolean(busy)} onClick={deleteLead}>{busy === "Deleting" ? "Deleting…" : "Delete"}</button>
+          {record.email && <a className={btn} href={`mailto:${record.email}`}><Mail aria-hidden />Email</a>}
+          <button className={btnDanger} disabled={Boolean(busy)} onClick={deleteLead}><Trash2 aria-hidden />{busy === "Deleting" ? "Deleting…" : "Delete"}</button>
         </div>
       </header>
 
@@ -272,8 +276,8 @@ export default function RecordView({ id }: { id: string }) {
               <button
                 disabled={Boolean(busy) || active}
                 onClick={() => patch({ stage: s.key as StageKey }, "Moving")}
-                className={`flex w-full items-center justify-center gap-1.5 whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-sm last:border-r-0 ${
-                  active ? "bg-indigo-600 font-semibold text-white" : passed ? "bg-indigo-50 text-indigo-800" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                className={`flex w-full items-center justify-center gap-1.5 whitespace-nowrap border-r border-slate-200 px-3 py-2.5 text-body last:border-r-0 ${
+                  active ? "bg-indigo-600 font-semibold text-white shadow" : passed ? "bg-indigo-50 text-indigo-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
                 aria-current={active ? "step" : undefined}
               >
@@ -285,18 +289,14 @@ export default function RecordView({ id }: { id: string }) {
         })}
       </ol>
 
-      {message && (
-        <p role={message.error ? "alert" : "status"} className={`mb-4 rounded-lg px-4 py-2.5 text-sm ${message.error ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>
-          {message.text}
-        </p>
-      )}
+      {message && <StatusMessage tone={message.error ? "err" : "ok"} className="mb-4 mt-0">{message.text}</StatusMessage>}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
         <div className="space-y-5">
           {formAnswer && (
             <section className={card} aria-labelledby="answer-h">
-              <div className={cardHeader}><h2 id="answer-h" className={h2}>Form answer</h2></div>
-              <div className="p-4 text-sm">
+              <div className={cardHeader}><h2 id="answer-h" className={h2}>Form Answer</h2></div>
+              <div className="p-4 text-body">
                 <p className="font-medium text-slate-500">{labels[FORM_ANSWER_KEY] ?? "What are you looking to finance?"}</p>
                 <p className="mt-1 whitespace-pre-wrap text-slate-900">{formAnswer}</p>
               </div>
@@ -307,27 +307,27 @@ export default function RecordView({ id }: { id: string }) {
             <div className={cardHeader}><h2 id="details-h" className={h2}>Details</h2></div>
             <dl className="divide-y divide-slate-100">
               {[...NAME_FIELDS, ...DETAIL_FIELDS].map((f) => (
-                <div key={f.key} className="grid grid-cols-[120px_1fr] items-center gap-3 px-4 py-2 text-sm sm:grid-cols-[140px_1fr]">
+                <div key={f.key} className="grid grid-cols-[120px_1fr] items-center gap-3 px-4 py-2 text-body sm:grid-cols-[140px_1fr]">
                   <dt className="text-slate-500">{f.label}</dt>
                   <dd className="min-w-0"><EditableCell record={record} field={f} onSave={save} /></dd>
                 </div>
               ))}
             </dl>
-            <h3 className="border-y border-slate-200 px-4 py-3 text-sm font-semibold">Custom fields</h3>
+            <h3 className="border-y border-slate-200 px-4 py-3 text-h2 font-bold">Custom Fields</h3>
             <dl className="divide-y divide-slate-100">
-              {customFields.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">None yet. Add fields like Loan type, Property state or Credit band.</p>}
+              {customFields.length === 0 && <p className="px-4 py-3 text-body text-slate-500">None yet. Add fields like Loan type, Property state or Credit band.</p>}
               {customFields.map((f) => (
-                <div key={f.key} className="grid grid-cols-[120px_1fr_auto] items-center gap-3 px-4 py-2 text-sm sm:grid-cols-[140px_1fr_auto]">
+                <div key={f.key} className="grid grid-cols-[120px_1fr_auto] items-center gap-3 px-4 py-2 text-body sm:grid-cols-[140px_1fr_auto]">
                   <dt className="truncate text-slate-500" title={f.label}>{f.label}</dt>
                   <dd className="min-w-0"><EditableCell record={record} field={f} onSave={save} /></dd>
-                  <button className="text-xs font-medium text-slate-500 hover:text-red-700" onClick={() => patch({ custom: { [f.key.slice(7)]: "" } }, "Removing")} aria-label={`Remove ${f.label}`}>Remove</button>
+                  <button className="text-caption font-medium text-slate-500 hover:text-red-700" onClick={() => patch({ custom: { [f.key.slice(7)]: "" } }, "Removing")} aria-label={`Remove ${f.label}`}>Remove</button>
                 </div>
               ))}
             </dl>
             <form onSubmit={addField} className="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row">
-              <input className={`${input} sm:w-44`} placeholder="Field name" maxLength={60} value={newLabel} onChange={(e) => setNewLabel(e.target.value)} aria-label="New field name" />
+              <input className={`${input} sm:w-44`} placeholder="Field name, like Loan type" maxLength={60} value={newLabel} onChange={(e) => setNewLabel(e.target.value)} aria-label="New field name" />
               <input className={`${input} flex-1`} placeholder="Value" maxLength={500} value={newVal} onChange={(e) => setNewVal(e.target.value)} aria-label="New field value" />
-              <button className={btn} disabled={Boolean(busy) || !newLabel.trim() || !newVal.trim()}>{busy === "Adding field" ? "Adding…" : "Add field"}</button>
+              <button className={btn} disabled={Boolean(busy) || !newLabel.trim() || !newVal.trim()}>{busy === "Adding field" ? "Adding…" : "Add Field"}</button>
             </form>
           </section>
         </div>
@@ -340,25 +340,25 @@ export default function RecordView({ id }: { id: string }) {
             <form onSubmit={addNote} className="border-b border-slate-200 p-4">
               <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={4000} placeholder="Log a call, meeting or note…" className={`${input} w-full resize-y`} aria-label="New note" />
               <div className="mt-2 flex justify-end">
-                <button className={btnPrimary} disabled={Boolean(busy) || !note.trim()}>{busy === "Adding note" ? "Adding…" : "Add note"}</button>
+                <button className={btnPrimary} disabled={Boolean(busy) || !note.trim()}>{busy === "Adding note" ? "Adding…" : "Add Note"}</button>
               </div>
             </form>
             <ol className="max-h-[640px] flex-1 space-y-4 overflow-y-auto p-4">
-              {timeline.length === 0 && <li className="text-sm text-slate-500">No activity yet. Edits, stage moves, verifications and notes show here.</li>}
+              {timeline.length === 0 && <li className="text-body text-slate-500">No activity yet. Edits, stage moves, verifications and notes show here.</li>}
               {timeline.map((t, i) => (
-                <li key={t.id ?? `${t.at}-${i}`} className="flex gap-3 text-sm">
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs text-slate-500" aria-hidden>
+                <li key={t.id ?? `${t.at}-${i}`} className="flex gap-3 text-body">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-caption text-slate-500" aria-hidden>
                     {TIMELINE_ICON[t.type] ?? "•"}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className={`break-words ${t.type === "note" ? "whitespace-pre-wrap text-slate-900" : "text-slate-700"}`}>{t.detail}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-caption text-slate-500">
                       <time dateTime={t.at} title={relative(t.at)}>{exactTime(t.at)}</time>
                       {t.by ? ` · ${t.by}` : ""}
                     </p>
                   </div>
                   {t.type === "note" && t.id && (
-                    <button onClick={() => deleteNote(t)} className="self-start text-xs font-medium text-slate-400 hover:text-red-700" aria-label="Delete note">Delete</button>
+                    <button onClick={() => deleteNote(t)} className="self-start text-caption font-medium text-slate-500 hover:text-red-700" aria-label="Delete note">Delete</button>
                   )}
                 </li>
               ))}

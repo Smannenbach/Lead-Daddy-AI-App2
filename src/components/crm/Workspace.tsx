@@ -25,7 +25,11 @@ import { allViews, isPreset, loadActiveViewId, loadSavedViews, newViewId, storeA
 import { sendJson } from "@/lib/client/api";
 import { EditableCell } from "@/components/crm/EditableCell";
 import { STAGE_STYLES, money } from "@/components/crm/ui";
+import { Columns3, Download, ListFilter, Tag as TagIcon, Trash2, UserRoundX, Users } from "lucide-react";
 import { PageBody, PageHeader } from "@/components/app/AppShell";
+import { EmptyState, Spinner, StatusMessage } from "@/components/ui/Status";
+import { ConsentBadge } from "@/components/ui/ConsentBadge";
+import { StageChip } from "@/components/crm/ui";
 import { useDialogs } from "@/components/ui/Dialog";
 import { btn, btnDanger, btnPrimary, card, input } from "@/components/ui/styles";
 
@@ -135,7 +139,7 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
 
   async function saveView(asNew: boolean) {
     if (asNew || isPreset(activeId)) {
-      const name = await prompt({ title: "Save this view", label: "View name", initial: view.name === stored.name ? `${view.name} (copy)` : view.name, confirmLabel: "Save view" });
+      const name = await prompt({ title: "Save This View", label: "View Name", initial: view.name === stored.name ? `${view.name} (copy)` : view.name, confirmLabel: "Save View" });
       if (!name) return;
       const v = { ...view, id: newViewId(), name: name.slice(0, 60) };
       const next = [...saved, v];
@@ -153,7 +157,7 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
 
   async function deleteView() {
     if (isPreset(activeId)) return;
-    if (!(await confirm({ title: "Delete this view?", body: `"${stored.name}" will be removed. Your leads aren't affected.`, confirmLabel: "Delete view", danger: true }))) return;
+    if (!(await confirm({ title: "Delete This View?", body: `"${stored.name}" will be removed. Your leads aren't affected.`, confirmLabel: "Delete View", danger: true }))) return;
     const next = saved.filter((s) => s.id !== activeId);
     setSaved(next);
     storeSavedViews(next);
@@ -246,7 +250,7 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
     <PageBody wide>
       <PageHeader
         title={title}
-        actions={<button className={btn} onClick={exportCsv} disabled={records.length === 0}>Export CSV</button>}
+        actions={<button className={btn} onClick={exportCsv} disabled={records.length === 0}><Download aria-hidden />Export CSV</button>}
       />
 
       <dl className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -258,8 +262,8 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
           ["Follow ups due", stats.followUpsDue.toLocaleString()],
         ].map(([k, v]) => (
           <div key={k} className={`${card} px-4 py-3`}>
-            <dt className="text-xs font-medium text-slate-500">{k}</dt>
-            <dd className="mt-0.5 text-lg font-semibold tabular-nums">{v}</dd>
+            <dt className="text-caption font-medium text-slate-500">{k}</dt>
+            <dd className="mt-0.5 text-lg font-bold tabular-nums">{v}</dd>
           </div>
         ))}
       </dl>
@@ -269,7 +273,7 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
           <button
             key={v.id}
             onClick={() => switchView(v)}
-            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${v.id === activeId ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+            className={`whitespace-nowrap border-b-2 px-3 py-2 text-body font-medium ${v.id === activeId ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
           >
             {v.name}
           </button>
@@ -284,14 +288,14 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
           className={`${input} w-full sm:w-72`}
           aria-label="Search leads"
         />
-        <div className="flex rounded-lg border border-slate-300 bg-white p-0.5 text-sm" role="group" aria-label="Layout">
+        <div className="flex rounded-lg border border-slate-300 bg-white p-0.5 text-body" role="group" aria-label="Layout">
           {(["table", "kanban"] as const).map((m) => (
             <button key={m} onClick={() => setView({ ...view, mode: m })} aria-pressed={view.mode === m} className={`rounded-md px-3 py-1.5 font-medium ${view.mode === m ? "bg-indigo-50 text-indigo-700" : "text-slate-500"}`}>
               {m === "table" ? "Table" : "Board"}
             </button>
           ))}
         </div>
-        <button className={btn} onClick={() => setView({ ...view, filters: [...view.filters, { field: "stage", op: "is", value: "new" }] })}>Add filter</button>
+        <button className={btn} onClick={() => setView({ ...view, filters: [...view.filters, { field: "stage", op: "is", value: "new" }] })}><ListFilter aria-hidden />Add Filter</button>
         <select
           className={input}
           aria-label="Sort by"
@@ -309,11 +313,11 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
         </select>
         {view.mode === "table" && (
           <div className="relative" ref={columnsRef}>
-            <button className={btn} onClick={() => setShowColumns((s) => !s)} aria-expanded={showColumns} aria-haspopup="true">Columns</button>
+            <button className={btn} onClick={() => setShowColumns((s) => !s)} aria-expanded={showColumns} aria-haspopup="true"><Columns3 aria-hidden />Columns</button>
             {showColumns && (
               <div className="absolute z-20 mt-1 max-h-80 w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
                 {fields.filter((f) => f.key !== "name").map((f) => (
-                  <label key={f.key} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                  <label key={f.key} className="flex items-center gap-2 rounded px-2 py-1.5 text-body hover:bg-slate-50">
                     <input
                       type="checkbox"
                       className="accent-indigo-600"
@@ -328,10 +332,10 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
           </div>
         )}
         <div className="flex flex-wrap gap-2 sm:ml-auto">
-          {dirty && <button className={btnPrimary} onClick={() => saveView(false)}>{isPreset(activeId) ? "Save as view" : "Save view"}</button>}
+          {dirty && <button className={btnPrimary} onClick={() => saveView(false)}>{isPreset(activeId) ? "Save as View" : "Save View"}</button>}
           {dirty && <button className={btn} onClick={() => switchView(stored)}>Reset</button>}
           {!isPreset(activeId) && <button className={btn} onClick={() => saveView(true)}>Duplicate</button>}
-          {!isPreset(activeId) && <button className={btn} onClick={deleteView}>Delete view</button>}
+          {!isPreset(activeId) && <button className={btn} onClick={deleteView}>Delete View</button>}
         </div>
       </div>
 
@@ -355,7 +359,7 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
                   ) : (
                     <input className={`${input} w-32 py-1`} value={f.value ?? ""} onChange={(e) => setFilter(i, { ...f, value: e.target.value })} aria-label="Filter value" />
                   ))}
-                <button onClick={() => setFilter(i, null)} className="px-2 text-slate-400 hover:text-slate-800" aria-label="Remove filter">×</button>
+                <button onClick={() => setFilter(i, null)} className="px-2 text-slate-500 hover:text-slate-800" aria-label="Remove filter">×</button>
               </div>
             );
           })}
@@ -363,7 +367,7 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
       )}
 
       {selected.size > 0 && (
-        <div className="sticky top-16 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/95 px-3 py-2 text-sm backdrop-blur lg:top-2">
+        <div className="sticky top-16 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/95 px-3 py-2 text-body backdrop-blur lg:top-2">
           <span className="font-semibold text-indigo-900">{selected.size} selected</span>
           <select
             className={`${input} py-1.5`}
@@ -375,40 +379,72 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
             }}
             aria-label="Move selected to stage"
           >
-            <option value="">Move to stage…</option>
+            <option value="">Move to Stage…</option>
             {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
-          <button className={btn} disabled={Boolean(bulkBusy)} onClick={bulkTag}>Add tag</button>
-          <button className={btn} disabled={Boolean(bulkBusy)} onClick={bulkOwner}>Set owner</button>
-          <button className={btn} disabled={Boolean(bulkBusy)} onClick={bulkFollowUp}>Set follow up</button>
-          <button className={btnDanger} disabled={Boolean(bulkBusy)} onClick={bulkDelete}>Delete</button>
-          {bulkBusy && <span className="text-indigo-800">Working…</span>}
+          <button className={btn} disabled={Boolean(bulkBusy)} onClick={bulkTag}><TagIcon aria-hidden />Add Tag</button>
+          <button className={btn} disabled={Boolean(bulkBusy)} onClick={bulkOwner}>Set Owner</button>
+          <button className={btn} disabled={Boolean(bulkBusy)} onClick={bulkFollowUp}>Set Follow Up</button>
+          <button className={btnDanger} disabled={Boolean(bulkBusy)} onClick={bulkDelete}><Trash2 aria-hidden />Delete</button>
+          {bulkBusy && <Spinner label="Working…" />}
           <button className="ml-auto font-medium text-slate-600 hover:text-slate-900" onClick={() => setSelected(new Set())}>Clear</button>
         </div>
       )}
 
       {toast && (
-        <div role={toast.error ? "alert" : "status"} className={`fixed bottom-4 left-4 right-4 z-30 rounded-lg px-4 py-3 text-sm shadow-lg sm:left-auto sm:max-w-sm ${toast.error ? "bg-red-700 text-white" : "bg-slate-900 text-white"}`}>
+        <div role={toast.error ? "alert" : "status"} className={`fixed bottom-4 left-4 right-4 z-30 rounded-lg px-4 py-3 text-body shadow-lg sm:left-auto sm:max-w-sm ${toast.error ? "bg-red-700 text-white" : "bg-slate-900 text-white"}`}>
           {toast.text}
         </div>
       )}
       {dialogs}
 
       {loading ? (
-        <div className={`${card} p-10 text-center text-sm text-slate-500`}>Loading leads…</div>
+        <div className={`${card} flex justify-center p-10`}><Spinner label="Loading leads…" /></div>
       ) : loadError ? (
-        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-800">
+        <StatusMessage tone="err">
           Leads didn&apos;t load: {loadError} <button onClick={load} className="ml-2 font-semibold underline">Retry</button>
-        </div>
+        </StatusMessage>
       ) : records.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
-          <p className="mb-1 font-semibold">No leads yet</p>
-          <p className="text-sm text-slate-500">Add, import or scrape leads from <Link href="/" className="font-medium text-indigo-600 underline">Home</Link>. They show up here right away.</p>
-        </div>
+        <EmptyState icon={Users} title="No Leads Yet">
+          Add, import or scrape leads from <Link href="/" className="font-medium text-indigo-600 underline">Home</Link>. They show up here right away.
+        </EmptyState>
       ) : view.mode === "table" ? (
-        <div className={`${card} overflow-x-auto`}>
-          <table className="w-full min-w-[900px] table-fixed text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="@container">
+        {/* Under 600px of width the table becomes stacked cards. */}
+        <ul className="space-y-2 @min-[600px]:hidden" aria-label="Leads">
+          {rows.map((r) => (
+            <li key={r.id} className={`rounded-xl border border-slate-300 bg-white p-3 shadow-sm ${selected.has(r.id) ? "ring-2 ring-indigo-200" : ""}`}>
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 accent-indigo-600"
+                  checked={selected.has(r.id)}
+                  onChange={() => {
+                    const next = new Set(selected);
+                    if (next.has(r.id)) next.delete(r.id);
+                    else next.add(r.id);
+                    setSelected(next);
+                  }}
+                  aria-label={`Select ${displayName(r)}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <Link href={`/crm/${r.id}`} className="block truncate font-bold text-slate-900 hover:text-indigo-600">{displayName(r)}</Link>
+                  {r.company && <p className="truncate text-caption text-slate-600">{r.company}</p>}
+                  {(r.email || r.phone) && <p className="truncate text-caption text-slate-600">{[r.email, r.phone].filter(Boolean).join(" · ")}</p>}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <StageChip stage={r.stage} />
+                    <ConsentBadge value={r.consent} />
+                    {r.estimated_value !== null && <span className="text-caption font-semibold tabular-nums text-slate-700">{money(r.estimated_value)}</span>}
+                  </div>
+                </div>
+              </div>
+            </li>
+          ))}
+          {rows.length === 0 && <li className="p-6 text-center text-body text-slate-600">No leads match this view.</li>}
+        </ul>
+        <div className={`${card} hidden overflow-x-auto @min-[600px]:block`}>
+          <table className="w-full min-w-[900px] table-fixed text-body">
+            <thead className="bg-slate-50 text-left text-caption font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="w-10 px-3 py-3">
                   <input type="checkbox" className="accent-indigo-600" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))} aria-label="Select all in view" />
@@ -456,7 +492,13 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
               ))}
             </tbody>
           </table>
-          {rows.length === 0 && <p className="p-6 text-center text-sm text-slate-500">No leads match this view.</p>}
+          {rows.length === 0 && (
+            <div className="flex flex-col items-center p-10 text-center">
+              <UserRoundX aria-hidden className="mb-3 size-16 text-slate-300" />
+              <p className="text-body text-slate-600">No leads match this view.</p>
+            </div>
+          )}
+        </div>
         </div>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-4">
@@ -476,13 +518,13 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
                 className="flex w-72 shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-100/70"
                 aria-label={`${s.label} column`}
               >
-                <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2.5 text-sm">
+                <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2.5 text-body">
                   <span className="flex items-center gap-2 font-semibold">
                     <span className={`h-2 w-2 rounded-full ${STAGE_STYLES[s.key].dot}`} />
                     {s.label}
                     <span className="font-normal text-slate-500">{items.length}</span>
                   </span>
-                  <span className="text-xs tabular-nums text-slate-500">{money(total)}</span>
+                  <span className="text-caption tabular-nums text-slate-500">{money(total)}</span>
                 </header>
                 <div className="flex min-h-24 flex-col gap-2 p-2">
                   {items.map((r) => (
@@ -493,11 +535,11 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
                         e.dataTransfer.setData("text/plain", r.id);
                         setDragId(r.id);
                       }}
-                      className={`cursor-grab rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm hover:border-slate-300 active:cursor-grabbing ${dragId === r.id ? "opacity-50" : ""}`}
+                      className={`cursor-grab rounded-lg border border-slate-200 bg-white p-3 text-body shadow-sm hover:border-slate-300 active:cursor-grabbing ${dragId === r.id ? "opacity-50" : ""}`}
                     >
                       <Link href={`/crm/${r.id}`} className="block truncate font-medium hover:text-indigo-700 hover:underline">{displayName(r)}</Link>
-                      {(r.company || r.job_title) && <div className="truncate text-xs text-slate-500">{[r.job_title, r.company].filter(Boolean).join(" · ")}</div>}
-                      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                      {(r.company || r.job_title) && <div className="truncate text-caption text-slate-500">{[r.job_title, r.company].filter(Boolean).join(" · ")}</div>}
+                      <div className="mt-2 flex items-center justify-between gap-2 text-caption text-slate-500">
                         <span className="tabular-nums">{money(r.estimated_value) || "No value"}</span>
                         {/* Works on touch screens where dragging doesn't. */}
                         <select
@@ -517,7 +559,7 @@ export default function Workspace({ initialViewId, title = "Leads" }: { initialV
           })}
         </div>
       )}
-      {truncated && <p className="mt-3 text-xs text-amber-700">Showing the 2,000 most recently updated leads. Older leads aren&apos;t loaded here yet.</p>}
+      {truncated && <p className="mt-3 text-caption text-amber-700">Showing the 2,000 most recently updated leads. Older leads aren&apos;t loaded here yet.</p>}
     </PageBody>
   );
 }

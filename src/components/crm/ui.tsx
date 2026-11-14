@@ -20,7 +20,7 @@ export function stageLabel(key: StageKey): string {
 export function StageChip({ stage }: { stage: StageKey }) {
   const s = STAGE_STYLES[stage];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${s.chip}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-caption font-semibold ring-1 ring-inset ${s.chip}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
       {stageLabel(stage)}
     </span>
@@ -33,18 +33,18 @@ const STATUS: Record<string, { cls: string; label?: string }> = {
   invalid: { cls: "text-red-700" },
   revoked: { cls: "text-red-700", label: "opted out" },
   risky: { cls: "text-amber-700" },
-  unknown: { cls: "text-slate-500" },
-  none: { cls: "text-slate-500", label: "none" },
+  unknown: { cls: "text-slate-600" },
+  none: { cls: "text-slate-600", label: "none" },
 };
 
 export function StatusText({ value }: { value: string }) {
   const v = (value || "unverified").toLowerCase();
   const s = STATUS[v];
-  return <span className={`text-xs font-medium ${s?.cls ?? "text-slate-500"}`}>{s?.label ?? v}</span>;
+  return <span className={`text-caption font-semibold ${s?.cls ?? "text-slate-600"}`}>{s?.label ?? v}</span>;
 }
 
 export function Tag({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">{children}</span>;
+  return <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-caption font-semibold text-indigo-800">{children}</span>;
 }
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });

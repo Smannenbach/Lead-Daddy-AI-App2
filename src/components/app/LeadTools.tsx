@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { btn, btnPrimary, card, cardHeader, h2, input, muted, resultErr, resultInfo, resultOk } from "@/components/ui/styles";
+import { FileUp, ScanSearch, UserPlus } from "lucide-react";
+import { btn, btnPrimary, card, cardHeader, h2, input, muted } from "@/components/ui/styles";
+import { StatusMessage, type Tone } from "@/components/ui/Status";
 
-type Result = { tone: "ok" | "err" | "info"; text: React.ReactNode } | null;
+type Result = { tone: Tone; text: React.ReactNode } | null;
 
 function ResultBox({ result }: { result: Result }) {
   if (!result) return null;
-  const cls = result.tone === "ok" ? resultOk : result.tone === "err" ? resultErr : resultInfo;
-  return <div role={result.tone === "err" ? "alert" : "status"} className={cls}>{result.text}</div>;
+  return <StatusMessage tone={result.tone}>{result.text}</StatusMessage>;
 }
 
 async function readJson(res: Response): Promise<Record<string, unknown>> {
@@ -59,7 +60,7 @@ export function AddLeadCard({ onDone }: { onDone?: () => void }) {
   }
 
   const f = (key: Exclude<keyof typeof EMPTY, "tcpa_consent">, label: string, opts: { type?: string; required?: boolean; max?: number; auto?: string } = {}) => (
-    <label className="block text-sm">
+    <label className="block text-body">
       <span className="mb-1 block font-medium text-slate-700">{label}{opts.required ? " *" : ""}</span>
       <input
         type={opts.type ?? "text"}
@@ -75,21 +76,21 @@ export function AddLeadCard({ onDone }: { onDone?: () => void }) {
 
   return (
     <section className={card} aria-labelledby="add-lead-h">
-      <div className={cardHeader}><h2 id="add-lead-h" className={h2}>Add a lead</h2></div>
+      <div className={cardHeader}><h2 id="add-lead-h" className={`${h2} flex items-center gap-2`}><UserPlus aria-hidden className="size-4 text-indigo-600" />Add a Lead</h2></div>
       <form onSubmit={submit} className="space-y-3 p-4">
         <div className="grid gap-3 sm:grid-cols-2">
-          {f("first_name", "First name", { required: true, max: 100, auto: "off" })}
-          {f("last_name", "Last name", { max: 100, auto: "off" })}
+          {f("first_name", "First Name", { required: true, max: 100, auto: "off" })}
+          {f("last_name", "Last Name", { max: 100, auto: "off" })}
           {f("email", "Email", { type: "email", max: 254, auto: "off" })}
           {f("phone", "Phone", { type: "tel", max: 20, auto: "off" })}
           {f("company", "Company")}
           {f("job_title", "Title", { max: 150 })}
         </div>
-        <label className="flex items-start gap-2 text-sm text-slate-600">
-          <input type="checkbox" checked={form.tcpa_consent} onChange={(e) => setForm({ ...form, tcpa_consent: e.target.checked })} className="mt-0.5 accent-indigo-600" />
+        <label className="flex items-start gap-2 text-body text-slate-600">
+          <input type="checkbox" checked={form.tcpa_consent} onChange={(e) => setForm({ ...form, tcpa_consent: e.target.checked })} className="mt-0.5 size-4 accent-indigo-600" />
           <span>Lead granted TCPA consent for SMS/call outreach</span>
         </label>
-        <button type="submit" disabled={busy || !form.first_name.trim()} className={btnPrimary}>{busy ? "Adding…" : "Add lead"}</button>
+        <button type="submit" disabled={busy || !form.first_name.trim()} className={btnPrimary}>{busy ? "Adding…" : "Add Lead"}</button>
         <ResultBox result={result} />
       </form>
     </section>
@@ -132,13 +133,13 @@ export function ImportCard({ onDone }: { onDone?: () => void }) {
 
   return (
     <section className={card} aria-labelledby="import-h">
-      <div className={cardHeader}><h2 id="import-h" className={h2}>Import a CSV</h2></div>
+      <div className={cardHeader}><h2 id="import-h" className={`${h2} flex items-center gap-2`}><FileUp aria-hidden className="size-4 text-indigo-600" />Import a CSV</h2></div>
       <div className="p-4">
         <p className={muted}>
           Use a header row like first_name, last_name, email, phone, company, title. Each row needs an email or a phone. Duplicate emails are skipped.
         </p>
         <label className={`${btn} mt-3 cursor-pointer ${busy ? "pointer-events-none opacity-50" : ""}`}>
-          {busy ? "Importing…" : "Choose a .csv file"}
+          {busy ? "Importing…" : "Choose a CSV File"}
           <input
             type="file"
             accept=".csv,text/csv"
@@ -153,8 +154,8 @@ export function ImportCard({ onDone }: { onDone?: () => void }) {
         </label>
         <ResultBox result={result} />
         {skipped.length > 0 && (
-          <details className="mt-2 text-sm text-slate-600" open={skipped.length <= 5}>
-            <summary className="cursor-pointer font-medium">Skipped rows</summary>
+          <details className="mt-2 text-body text-slate-600" open={skipped.length <= 5}>
+            <summary className="cursor-pointer font-medium">Skipped Rows</summary>
             <ul className="mt-1 space-y-0.5">
               {skipped.slice(0, 100).map((s) => <li key={`${s.row}-${s.reason}`}>Row {s.row}: {s.reason}</li>)}
             </ul>
@@ -204,23 +205,23 @@ export function ScrapeCard({ onDone }: { onDone?: () => void }) {
 
   return (
     <section className={card} aria-labelledby="scrape-h">
-      <div className={cardHeader}><h2 id="scrape-h" className={h2}>Scrape a page</h2></div>
+      <div className={cardHeader}><h2 id="scrape-h" className={`${h2} flex items-center gap-2`}><ScanSearch aria-hidden className="size-4 text-indigo-600" />Scrape a Page</h2></div>
       <form onSubmit={submit} className="space-y-3 p-4">
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium text-slate-700">Page address</span>
+        <label className="block text-body">
+          <span className="mb-1 block font-medium text-slate-700">Page Address</span>
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/team" inputMode="url" maxLength={2048} className={`${input} w-full`} />
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 text-body text-slate-600">
           <input type="checkbox" checked={create} onChange={(e) => setCreate(e.target.checked)} className="accent-indigo-600" />
           Add the people it finds as leads
         </label>
-        <label className={`flex items-center gap-2 text-sm ${create ? "text-slate-600" : "text-slate-400"}`}>
+        <label className={`flex items-center gap-2 text-body ${create ? "text-slate-600" : "text-slate-500"}`}>
           <input type="checkbox" checked={verify} disabled={!create} onChange={(e) => setVerify(e.target.checked)} className="accent-indigo-600" />
           Also verify them (uses verification credits)
         </label>
-        <button type="submit" disabled={busy || !url.trim()} className={btnPrimary}>{busy ? "Reading the page…" : "Scrape and summarize"}</button>
+        <button type="submit" disabled={busy || !url.trim()} className={btnPrimary}>{busy ? "Reading the Page…" : "Scrape and Summarize"}</button>
         <ResultBox result={result} />
-        {digest && <p className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{digest}</p>}
+        {digest && <p className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 text-body text-slate-700">{digest}</p>}
       </form>
     </section>
   );

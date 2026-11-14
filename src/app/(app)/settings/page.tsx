@@ -21,24 +21,26 @@ export default function SettingsPage() {
 
   useEffect(() => {
     createClient().auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
-    getJson<{ providers: Array<{ label: string }>; agents: Array<{ name: string }> }>("/api/ai").then((r) => r.ok && setAi(r.data));
+    getJson<{ providers: Array<{ label: string }>; agents: Array<{ name: string }> }>("/api/ai").then((r) => {
+      if (r.ok) setAi({ providers: Array.isArray(r.data.providers) ? r.data.providers : [], agents: Array.isArray(r.data.agents) ? r.data.agents : [] });
+    });
     getJson<{ emailCreditsRemaining: number | null }>("/api/verify/credits").then((r) => setCredits(r.ok ? r.data.emailCreditsRemaining : null));
   }, []);
 
   const rows: Array<[string, React.ReactNode]> = [
-    ["Signed in as", email || "…"],
-    ["Your time zone", <>{tz || "…"} <span className="text-slate-500">(used for exports)</span></>],
-    ["Email verification credits", credits === undefined ? "…" : credits === null ? "Unknown" : credits.toLocaleString()],
-    ["AI models in use", ai ? ai.providers.map((p) => p.label).join(", ") || "None" : "…"],
-    ["AI agents", ai ? ai.agents.map((a) => a.name).join(", ") || "None" : "…"],
+    ["Signed In As", email || "…"],
+    ["Your Time Zone", <>{tz || "…"} <span className="text-slate-500">(used for exports)</span></>],
+    ["Email Verification Credits", credits === undefined ? "…" : credits === null ? "Unknown" : credits.toLocaleString()],
+    ["AI Models in Use", ai ? ai.providers.map((p) => p.label).join(", ") || "None" : "…"],
+    ["AI Agents", ai ? ai.agents.map((a) => a.name).join(", ") || "None" : "…"],
   ];
 
   return (
     <PageBody>
-      <PageHeader title="Settings" />
+      <PageHeader subtitle="What this account is using. Changes come later." />
       <section className={`${card} max-w-2xl`}>
         <div className={cardHeader}><h2 className={h2}>Account</h2></div>
-        <dl className="divide-y divide-slate-100 text-sm">
+        <dl className="divide-y divide-slate-100 text-body">
           {rows.map(([k, v]) => (
             <div key={k} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]">
               <dt className="text-slate-500">{k}</dt>
@@ -46,10 +48,10 @@ export default function SettingsPage() {
             </div>
           ))}
         </dl>
-        <div className="border-t border-slate-200 px-4 py-3 text-sm">
-          <Link href="/privacy" className="font-medium text-indigo-600 hover:text-indigo-800">Privacy Policy</Link>
-          <span className="mx-2 text-slate-300">·</span>
-          <Link href="/terms" className="font-medium text-indigo-600 hover:text-indigo-800">Terms of Service</Link>
+        <div className="border-t border-slate-200 px-4 py-3 text-body">
+          <Link href="/privacy" className="font-medium text-indigo-600 hover:text-indigo-700">Privacy Policy</Link>
+          <span aria-hidden="true" className="mx-2 text-slate-300">·</span>
+          <Link href="/terms" className="font-medium text-indigo-600 hover:text-indigo-700">Terms of Service</Link>
         </div>
       </section>
     </PageBody>

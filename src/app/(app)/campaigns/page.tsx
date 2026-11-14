@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { getJson, sendJson } from "@/lib/client/api";
 import { PageBody, PageHeader } from "@/components/app/AppShell";
 import { Dialog, useDialogs } from "@/components/ui/Dialog";
-import { btn, btnDanger, btnPrimary, card, cardHeader, h2, input, muted, resultErr, resultOk } from "@/components/ui/styles";
+import { Megaphone, Play, Rocket, Trash2 } from "lucide-react";
+import { btn, btnDanger, btnPrimary, card, cardHeader, h2, input } from "@/components/ui/styles";
+import { EmptyState, Spinner, StatusMessage } from "@/components/ui/Status";
 
 interface Campaign {
   id: string;
@@ -32,9 +34,9 @@ interface Preview {
 
 const CHANNEL_LABEL: Record<string, string> = { email: "Email", sms: "Text", call: "Call" };
 const STATUS_STYLE: Record<string, string> = {
-  live: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  active: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  draft: "bg-slate-100 text-slate-600 ring-slate-200",
+  live: "bg-emerald-100 text-emerald-800",
+  active: "bg-emerald-100 text-emerald-800",
+  draft: "bg-slate-100 text-slate-700",
 };
 
 function when(min: number): string {
@@ -128,9 +130,9 @@ export default function CampaignsPage() {
 
   async function runNext(c: Campaign) {
     const ok = await confirm({
-      title: "Send the next step now?",
+      title: "Send the Next Step Now?",
       body: `The next step of ${c.name} goes out right away to its ${c.recipients} recipient(s). Leads without consent are skipped for texts and calls.`,
-      confirmLabel: "Send now",
+      confirmLabel: "Send Now",
     });
     if (!ok) return;
     setBusyRow(c.id);
@@ -149,7 +151,7 @@ export default function CampaignsPage() {
     const ok = await confirm({
       title: `Delete ${c.name}?`,
       body: c.status === "live" ? "This stops the campaign. Nothing already sent is undone." : "The draft will be removed.",
-      confirmLabel: "Delete campaign",
+      confirmLabel: "Delete Campaign",
       danger: true,
     });
     if (!ok) return;
@@ -166,22 +168,22 @@ export default function CampaignsPage() {
   return (
     <PageBody>
       {dialogs}
-      <PageHeader title="Campaigns" subtitle="Nothing sends until you review a campaign and launch it." />
+      <PageHeader subtitle="Nothing sends until you review a campaign and launch it." />
 
       <section className={`${card} mb-6`} aria-labelledby="new-h">
-        <div className={cardHeader}><h2 id="new-h" className={h2}>New campaign</h2></div>
+        <div className={cardHeader}><h2 id="new-h" className={h2}>New Campaign</h2></div>
         <form onSubmit={create} className="space-y-3 p-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm">
+            <label className="block text-body">
               <span className="mb-1 block font-medium text-slate-700">Name *</span>
               <input required maxLength={200} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={`${input} w-full`} />
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Brief for the AI writer</span>
+            <label className="block text-body">
+              <span className="mb-1 block font-medium text-slate-700">Brief for the AI Writer</span>
               <input maxLength={1000} value={form.brief} onChange={(e) => setForm({ ...form, brief: e.target.value })} placeholder="Offer, audience and goal" className={`${input} w-full`} />
             </label>
           </div>
-          <fieldset className="flex flex-wrap items-center gap-4 text-sm text-slate-700">
+          <fieldset className="flex flex-wrap items-center gap-4 text-body text-slate-700">
             <legend className="mb-1 w-full font-medium">Channels</legend>
             {(["email", "sms", "call"] as const).map((c) => (
               <label key={c} className="flex items-center gap-1.5">
@@ -189,25 +191,25 @@ export default function CampaignsPage() {
                 {CHANNEL_LABEL[c]}
               </label>
             ))}
-            <span className="text-xs text-slate-500">Texts and calls only go to leads with consent on file.</span>
+            <span className="text-caption text-slate-500">Texts and calls only go to leads with consent on file.</span>
           </fieldset>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-body text-slate-700">
             <input type="checkbox" checked={form.allLeads} onChange={(e) => setForm({ ...form, allLeads: e.target.checked })} className="accent-indigo-600" />
             Add all current leads as recipients
           </label>
-          <button type="submit" disabled={creating || !form.name.trim()} className={btnPrimary}>{creating ? "Writing the copy…" : "Create draft with AI copy"}</button>
-          {createResult && <p role={createResult.ok ? "status" : "alert"} className={createResult.ok ? resultOk : resultErr}>{createResult.text}</p>}
+          <button type="submit" disabled={creating || !form.name.trim()} className={btnPrimary}>{creating ? "Writing the Copy…" : "Create Draft with AI Copy"}</button>
+          {createResult && <StatusMessage tone={createResult.ok ? "ok" : "err"}>{createResult.text}</StatusMessage>}
         </form>
       </section>
 
       <section className={card} aria-labelledby="list-h">
-        <div className={cardHeader}><h2 id="list-h" className={h2}>Your campaigns</h2></div>
+        <div className={cardHeader}><h2 id="list-h" className={h2}>Your Campaigns</h2></div>
         {loadError ? (
-          <p role="alert" className="p-4 text-sm text-red-700">{loadError} <button onClick={load} className="ml-1 font-semibold underline">Retry</button></p>
+          <div className="p-4"><StatusMessage tone="err" className="mt-0">{loadError} <button onClick={load} className="ml-1 font-semibold underline">Retry</button></StatusMessage></div>
         ) : campaigns === null ? (
-          <p className={`${muted} p-4`}>Loading campaigns…</p>
+          <div className="p-4"><Spinner label="Loading campaigns…" /></div>
         ) : campaigns.length === 0 ? (
-          <p className={`${muted} p-4`}>No campaigns yet. Create one above.</p>
+          <div className="p-4"><EmptyState icon={Megaphone} title="No Campaigns Yet">Create one above. It stays a draft until you review and launch it.</EmptyState></div>
         ) : (
           <ul className="divide-y divide-slate-100">
             {campaigns.map((c) => {
@@ -216,26 +218,26 @@ export default function CampaignsPage() {
                 <li key={c.id} className="p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <p className="flex flex-wrap items-center gap-2 font-medium">
+                      <p className="flex flex-wrap items-center gap-2 font-bold">
                         <span className="truncate">{c.name}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs ring-1 ring-inset ${STATUS_STYLE[c.status] ?? STATUS_STYLE.draft}`}>{c.status}</span>
+                        <span className={`rounded-md px-2.5 py-0.5 text-caption font-semibold capitalize ${STATUS_STYLE[c.status] ?? STATUS_STYLE.draft}`}>{c.status}</span>
                       </p>
-                      <p className="mt-0.5 text-sm text-slate-500">
+                      <p className="mt-0.5 text-body text-slate-500">
                         {c.recipients} recipient(s) · {c.channels.map((x) => CHANNEL_LABEL[x] ?? x).join(" then ") || "No steps yet"}
                         {(c.sent > 0 || c.skipped > 0) && ` · ${c.sent} sent, ${c.skipped} skipped`}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {!running && (
-                        <button className={btnPrimary} disabled={busyRow === c.id} onClick={() => openReview(c)}>{busyRow === c.id ? "Loading…" : "Review and launch"}</button>
+                        <button className={btnPrimary} disabled={busyRow === c.id} onClick={() => openReview(c)}><Rocket aria-hidden />{busyRow === c.id ? "Loading…" : "Review and Launch"}</button>
                       )}
                       {c.status === "live" && c.pendingSteps > 0 && (
-                        <button className={btn} disabled={busyRow === c.id} onClick={() => runNext(c)}>{busyRow === c.id ? "Sending…" : "Run next step"}</button>
+                        <button className={btn} disabled={busyRow === c.id} onClick={() => runNext(c)}><Play aria-hidden />{busyRow === c.id ? "Sending…" : "Run Next Step"}</button>
                       )}
-                      <button className={btnDanger} disabled={busyRow === c.id} onClick={() => remove(c)}>Delete</button>
+                      <button className={btnDanger} disabled={busyRow === c.id} onClick={() => remove(c)}><Trash2 aria-hidden />Delete</button>
                     </div>
                   </div>
-                  {rowMsg[c.id] && <p role={rowMsg[c.id].ok ? "status" : "alert"} className={rowMsg[c.id].ok ? resultOk : resultErr}>{rowMsg[c.id].text}</p>}
+                  {rowMsg[c.id] && <StatusMessage tone={rowMsg[c.id].ok ? "ok" : "err"}>{rowMsg[c.id].text}</StatusMessage>}
                 </li>
               );
             })}
@@ -252,7 +254,7 @@ export default function CampaignsPage() {
           <>
             <button className={btn} onClick={() => setReview(null)}>Cancel</button>
             <button className={btnPrimary} disabled={!canLaunch || launching} onClick={launch}>
-              {launching ? "Launching…" : skippedLeads > 0 ? `Launch and skip ${skippedLeads}` : "Launch"}
+              {launching ? "Launching…" : skippedLeads > 0 ? `Launch and Skip ${skippedLeads}` : "Launch"}
             </button>
           </>
         }
@@ -262,23 +264,23 @@ export default function CampaignsPage() {
             <div className="grid grid-cols-3 gap-2 text-center">
               {[["Recipients", review.recipients], ["Will be reached", review.willReach], ["Skipped", skippedLeads]].map(([k, v]) => (
                 <div key={String(k)} className="rounded-lg bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">{k}</p>
-                  <p className="text-xl font-semibold tabular-nums">{v}</p>
+                  <p className="text-caption text-slate-500">{k}</p>
+                  <p className="text-xl font-bold tabular-nums">{v}</p>
                 </div>
               ))}
             </div>
-            {review.recipients === 0 && <p className={resultErr}>This campaign has no recipients. Add leads before launching.</p>}
-            {review.missing > 0 && <p className={resultErr}>{review.missing} recipient(s) were deleted. Remove them before launching.</p>}
+            {review.recipients === 0 && <StatusMessage tone="err">This campaign has no recipients. Add leads before launching.</StatusMessage>}
+            {review.missing > 0 && <StatusMessage tone="err">{review.missing} recipient(s) were deleted. Remove them before launching.</StatusMessage>}
 
             <div>
-              <h3 className="mb-2 font-semibold text-slate-900">What goes out</h3>
+              <h3 className="mb-2 text-h2 font-bold text-slate-900">What Goes Out</h3>
               {review.steps.length === 0 ? (
-                <p className={resultErr}>No messages are written yet.</p>
+                <StatusMessage tone="err">No messages are written yet.</StatusMessage>
               ) : (
                 <ol className="space-y-2">
                   {review.steps.map((st) => (
                     <li key={st.index} className="rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{CHANNEL_LABEL[st.channel] ?? st.channel} · {when(st.offsetMinutes)}</p>
+                      <p className="text-caption font-semibold uppercase tracking-wide text-slate-500">{CHANNEL_LABEL[st.channel] ?? st.channel} · {when(st.offsetMinutes)}</p>
                       {st.subject && <p className="mt-1 font-medium">Subject: {st.subject}</p>}
                       <p className="mt-1 whitespace-pre-wrap text-slate-700">{st.body}</p>
                     </li>
@@ -289,15 +291,15 @@ export default function CampaignsPage() {
 
             {review.skipped.length > 0 && (
               <div>
-                <h3 className="mb-2 font-semibold text-slate-900">Who gets skipped</h3>
-                <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900">
+                <h3 className="mb-2 text-h2 font-bold text-slate-900">Who Gets Skipped</h3>
+                <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-amber-100 p-3 text-amber-900">
                   {review.skipped.map((s, i) => (
                     <li key={`${s.leadId}-${s.channel}-${i}`}>{s.name}: {CHANNEL_LABEL[s.channel] ?? s.channel} skipped. {s.reason}.</li>
                   ))}
                 </ul>
               </div>
             )}
-            {launchError && <p role="alert" className={resultErr}>{launchError}</p>}
+            {launchError && <StatusMessage tone="err">{launchError}</StatusMessage>}
           </div>
         )}
       </Dialog>

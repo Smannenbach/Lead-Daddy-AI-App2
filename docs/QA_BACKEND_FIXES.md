@@ -156,3 +156,24 @@ Scope: app2 only (leaddaddy.ai is out of scope by owner decision). All on branch
 - Saved views still live in the browser (waiting on the table design decision).
 - Final legal text for Privacy, Terms, /bfcm lender name, NMLS ID and consent wording: Steve.
 - Cleanup: `scripts/qa-cleanup.sql` now covers 10 leads, 1 campaign, 3 form copies and the test login. Not run.
+
+---
+
+# Round 3: Lead Daddy design system applied (2026-11-14)
+
+Applied from the design system notes (not the Figma file):
+
+- Tokens in `src/app/globals.css`: system sans stack, caption 12px and body 14px, label, h1, h2, page title, display, eyebrow and hero sizes, 2px `indigo-400` focus ring. **The notes name page-title, h1, h2, display, label, eyebrow and hero but don't give their sizes; the values are our pick.**
+- Shared classes in `src/components/ui/styles.ts`: Button h-9 px-4 rounded-md (indigo passed explicitly), Input h-9 px-3, Card rounded-xl with shadow, Badge px-2.5 caption semibold, status colors that pass 4.5:1.
+- Shell: collapsible white sidebar with uppercase group labels and 20px Lucide icons, solid `indigo-600` active item with white text and shadow, sticky white header with the page title and Sign Out (red hover), skip link, phone overlay on a `slate-900` 40% scrim. Collapse choice is remembered per browser.
+- LD mark and avatars use the `indigo-600` to `violet-600` gradient; nowhere else.
+- Status is always color plus a word or icon (`src/components/ui/Status.tsx`), with 64px empty and error states and an indigo spinner.
+- Leads table turns into stacked cards under 600px of container width.
+- Title Case for short labels and buttons, sentence case for helper text and placeholders.
+- `/bfcm` uses the marketing dark surface: `slate-950`, `slate-800` borders, `indigo-400` and `emerald-400` accents, eyebrow kicker, hero headline in Title Case.
+
+Checked with a production build and a browser walkthrough at 390px and 1440px: no sideways scroll, no console errors, and an automated contrast audit passes 4.5:1 on every signed-in page.
+
+Not done:
+- shadcn/ui itself isn't installed in app2. The components follow the shadcn specs with plain Tailwind. Moving to real shadcn components is a separate step.
+- No marketing claims from the notes ("<10s", "12+ tools", "$97/mo") were added to app2. The pricing on leaddaddy.ai still conflicts and those claims are still unconfirmed.

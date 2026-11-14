@@ -22,7 +22,7 @@ export function CellDisplay({ record, field }: { record: CrmRecord; field: Field
 }
 
 function Empty() {
-  return <span className="text-slate-300">—</span>;
+  return <span className="text-slate-500">—</span>;
 }
 
 function initialText(record: CrmRecord, field: FieldDef): string {
@@ -86,7 +86,7 @@ export function EditableCell({
     );
   }
 
-  const common = "w-full rounded border border-indigo-400 bg-white px-1.5 py-1 text-sm text-slate-900 outline-none ring-2 ring-indigo-100";
+  const common = "w-full rounded border border-indigo-400 bg-white px-1.5 py-1 text-body text-slate-900 outline-none ring-2 ring-indigo-100";
   if (field.type === "stage") {
     return (
       <select

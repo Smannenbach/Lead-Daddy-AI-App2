@@ -6,7 +6,7 @@ import { ScrapeCard } from "@/components/app/LeadTools";
 export default function ScraperPage() {
   return (
     <PageBody>
-      <PageHeader title="Scraper" subtitle="Read a public web page and pull out the people on it." />
+      <PageHeader subtitle="Read a public web page and pull out the people on it." />
       <div className="max-w-2xl"><ScrapeCard /></div>
     </PageBody>
   );

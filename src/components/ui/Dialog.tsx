@@ -43,12 +43,12 @@ export function Dialog({
         aria-modal="true"
         aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
-        className={`max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
+        className={`max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white shadow-xl sm:rounded-xl ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
       >
         <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+          <h2 className="text-h2 font-bold text-slate-900">{title}</h2>
         </div>
-        <div className="px-5 py-4 text-sm text-slate-700">{children}</div>
+        <div className="px-5 py-4 text-body text-slate-700">{children}</div>
         {footer && <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-5 py-3 sm:flex-row sm:justify-end">{footer}</div>}
       </div>
     </div>
