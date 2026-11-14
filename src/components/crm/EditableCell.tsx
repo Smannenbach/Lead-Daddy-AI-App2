@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { STAGES, fieldValue, type CrmRecord, type FieldDef, type StageKey } from "@/lib/crm/model";
 import { StageChip, StatusText, Tag, money, shortDate } from "@/components/crm/ui";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function CellDisplay({ record, field }: { record: CrmRecord; field: FieldDef }) {
   const v = fieldValue(record, field.key);
@@ -49,7 +51,7 @@ export function EditableCell({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
-  const ref = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  const ref = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (editing) ref.current?.focus();
@@ -86,28 +88,31 @@ export function EditableCell({
     );
   }
 
-  const common = "w-full rounded border border-indigo-400 bg-white px-1.5 py-1 text-body text-slate-900 outline-none ring-2 ring-indigo-100";
   if (field.type === "stage") {
+    // shadcn Select, opened right away; closing it without a pick cancels the edit.
     return (
-      <select
-        ref={(el) => { ref.current = el; }}
+      <Select
+        defaultOpen
         value={draft}
         disabled={saving}
-        onClick={(e) => e.stopPropagation()}
-        onChange={(e) => commit(e.target.value as StageKey)}
-        onBlur={() => setEditing(false)}
-        onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
-        className={common}
+        onValueChange={(v) => commit(v as StageKey)}
+        onOpenChange={(open) => !open && setEditing(false)}
       >
-        {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-      </select>
+        <SelectTrigger size="sm" className="h-8 w-full" aria-label={`Edit ${field.label}`} onClick={(e) => e.stopPropagation()}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {STAGES.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
     );
   }
   return (
-    <input
+    <Input
       ref={(el) => { ref.current = el; }}
       value={draft}
       disabled={saving}
+      aria-label={`Edit ${field.label}`}
       type={field.type === "date" ? "date" : field.type === "number" || field.type === "currency" ? "text" : field.type === "email" ? "email" : "text"}
       inputMode={field.type === "number" || field.type === "currency" ? "decimal" : undefined}
       placeholder={field.type === "tags" ? "comma, separated" : undefined}
@@ -118,7 +123,7 @@ export function EditableCell({
         if (e.key === "Enter") commit(draft);
         if (e.key === "Escape") setEditing(false);
       }}
-      className={common}
+      className="h-8 border-indigo-400 px-2"
     />
   );
 }

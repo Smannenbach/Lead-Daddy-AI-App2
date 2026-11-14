@@ -177,3 +177,16 @@ Checked with a production build and a browser walkthrough at 390px and 1440px: n
 Not done:
 - shadcn/ui itself isn't installed in app2. The components follow the shadcn specs with plain Tailwind. Moving to real shadcn components is a separate step.
 - No marketing claims from the notes ("<10s", "12+ tools", "$97/mo") were added to app2. The pricing on leaddaddy.ai still conflicts and those claims are still unconfirmed.
+
+---
+
+# Round 4: shadcn/ui installed (2026-11-14)
+
+- `components.json`: new-york style, slate base, Lucide icons, Radix. Added with the shadcn CLI 4.22.2: button, input, label, textarea, card, badge, dialog, alert-dialog, alert, checkbox, select, table, tabs, sheet, sidebar, separator, tooltip, skeleton, dropdown-menu, sonner, avatar, breadcrumb (`src/components/ui/`).
+- Tokens in `src/app/globals.css`: the standard shadcn slate set (primary stays near-black), sidebar tokens set to the brand (white panel, `indigo-600` active), radius 8px, `.dark` tokens kept, app shell light only.
+- App2 now uses the real components: shadcn Sidebar (collapses to icons, a sheet on phones, state in the `sidebar_state` cookie read by the server), Card panels, Button with indigo passed explicitly, Input/Label/Checkbox/Textarea, Select, Tabs, DropdownMenu (Columns), Table, Badge, Alert, Dialog and AlertDialog (replace the browser pop-ups), Breadcrumb, Sonner toasts.
+- Thin wrappers keep the brand in one place: `src/components/app/Panel.tsx` (Panel, Field, CheckField) and `src/components/ui/styles.ts` (brand CTA, status badge tones).
+- Edits to generated files: the `cn` import path (the CLI wrote `from "cn"` and installed an unrelated npm package named `cn`, which was removed), `sonner.tsx` fixed to light (no `next-themes`), `use-mobile.ts` and the sidebar skeleton fixed for the lint rules, overlay scrims set to `slate-900` 40%.
+- `/bfcm` keeps its own marketing styling (dark surface); it doesn't use the app components.
+- Checked: production build, browser walkthrough at 390px and 1440px with no console errors and no sideways scroll, contrast audit passes 4.5:1, sidebar collapse persists across reloads, phone sheet opens and closes on navigation, skip link is the first Tab stop, dialogs close on Esc.
+- Note: these are current shadcn (v4) components. Their focus ring is 3px at 50% opacity, not the 1px ring in the design notes, and the app-level 2px `indigo-400` outline also applies. If the main app uses the older new-york components, the two will differ slightly.

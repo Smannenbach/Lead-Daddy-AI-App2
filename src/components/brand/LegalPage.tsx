@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LegalLinks, Logo, PublicShell } from "@/components/brand/Brand";
+import { StatusMessage } from "@/components/ui/Status";
 
 /**
  * Layout for policy pages. The text is NOT written by engineering: every section is a
@@ -17,9 +18,7 @@ export function LegalPage({ title, sections }: { title: string; sections: Array<
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
         <h1 className="text-3xl font-bold">{title}</h1>
         <p className="mt-2 text-body text-slate-500">Last updated: [DATE: Steve to add]</p>
-        <div role="note" className="mt-6 rounded-lg bg-amber-100 px-4 py-3 text-body text-amber-900">
-          Draft page. The final text is being written and reviewed. Nothing here is the final policy yet.
-        </div>
+        <StatusMessage tone="warn" className="mt-6">Draft page. The final text is being written and reviewed. Nothing here is the final policy yet.</StatusMessage>
         <div className="mt-8 space-y-8">
           {sections.map((s) => (
             <section key={s.heading}>

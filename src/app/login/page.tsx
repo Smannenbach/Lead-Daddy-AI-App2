@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LegalLinks, Logo, PublicShell } from "@/components/brand/Brand";
-import { btnPrimary, input } from "@/components/ui/styles";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StatusMessage } from "@/components/ui/Status";
+import { brandCta } from "@/components/ui/styles";
 
 type Mode = "password" | "magic" | "reset";
 
@@ -73,9 +79,9 @@ export default function LoginPage() {
 
   const submit = mode === "password" ? signInWithPassword : mode === "magic" ? sendMagicLink : sendReset;
   const label = busy
-    ? mode === "password" ? "Signing in…" : "Sending link…"
+    ? mode === "password" ? "Signing In…" : "Sending Link…"
     : mode === "password" ? "Sign In" : mode === "magic" ? "Email Me a Sign In Link" : "Email Me a Reset Link";
-  const inputCls = `${input} w-full`;
+  const linkBtn = "h-auto p-0 font-medium text-indigo-600 hover:bg-transparent hover:text-indigo-700";
 
   return (
     <PublicShell>
@@ -84,91 +90,74 @@ export default function LoginPage() {
           <div className="mb-8 flex justify-center">
             <Logo />
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow sm:p-8">
-            <h1 className="text-xl font-bold">{mode === "reset" ? "Reset Your Password" : "Sign In"}</h1>
-            <p className="mt-1 text-body text-slate-500">
-              {mode === "reset" ? "We'll email you a link to set a new password." : "Use your team email to get into Lead Daddy."}
-            </p>
+          <Card className="gap-6 shadow">
+            <CardHeader>
+              <CardTitle className="text-h1 font-bold">{mode === "reset" ? "Reset Your Password" : "Sign In"}</CardTitle>
+              <CardDescription className="text-body text-slate-600">
+                {mode === "reset" ? "We'll email you a link to set a new password." : "Use your team email to get into Lead Daddy."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {mode !== "reset" && (
+                <Tabs value={mode} onValueChange={(m) => switchMode(m as Mode)} className="mb-6">
+                  <TabsList className="w-full" aria-label="Sign in method">
+                    <TabsTrigger value="password">Password</TabsTrigger>
+                    <TabsTrigger value="magic">Email Link</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
 
-            {mode !== "reset" && (
-              <div className="mt-6 flex rounded-lg bg-slate-100 p-1 text-body" role="tablist" aria-label="Sign in method">
-                {(["password", "magic"] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="tab"
-                    aria-selected={mode === m}
-                    onClick={() => switchMode(m)}
-                    className={`flex-1 rounded-md px-3 py-1.5 font-medium ${mode === m ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-                  >
-                    {m === "password" ? "Password" : "Email Link"}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {sent ? (
-              <div className="mt-6 space-y-4">
-                <p className="rounded-lg bg-indigo-50 px-4 py-3 text-body text-indigo-800" role="status">{LINK_SENT}</p>
-                <button type="button" onClick={() => switchMode("password")} className="text-body font-medium text-indigo-600 hover:text-indigo-700">
-                  Back to Sign In
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={submit} className="mt-6 space-y-4">
-                <div>
-                  <label htmlFor="email" className="mb-1.5 block text-body font-medium text-slate-700">Email</label>
-                  <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" className={inputCls} />
+              {sent ? (
+                <div className="space-y-4">
+                  <StatusMessage tone="info" className="mt-0">{LINK_SENT}</StatusMessage>
+                  <Button type="button" variant="link" className={linkBtn} onClick={() => switchMode("password")}>Back to Sign In</Button>
                 </div>
-                {mode === "password" && (
-                  <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <label htmlFor="password" className="block text-body font-medium text-slate-700">Password</label>
-                      <button type="button" onClick={() => switchMode("reset")} className="text-body font-medium text-indigo-600 hover:text-indigo-700">
-                        Forgot Password?
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="current-password"
-                        className={`${inputCls} pr-16`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((v) => !v)}
-                        aria-pressed={showPassword}
-                        aria-controls="password"
-                        className="absolute inset-y-0 right-0 px-3 text-caption font-medium text-slate-500 hover:text-slate-800"
-                      >
-                        {showPassword ? "Hide" : "Show"}
-                      </button>
-                    </div>
+              ) : (
+                <form onSubmit={submit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" />
                   </div>
-                )}
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className={`${btnPrimary} h-10 w-full`}
-                >
-                  {label}
-                </button>
-                {error && <p className="text-body text-red-600" role="alert">{error}</p>}
-                {mode === "reset" && (
-                  <button type="button" onClick={() => switchMode("password")} className="text-body font-medium text-indigo-600 hover:text-indigo-700">
-                    Back to Sign In
-                  </button>
-                )}
-              </form>
-            )}
-          </div>
-          <p className="mt-6 text-center text-caption text-slate-500">
-            Need access? Ask your Lead Daddy admin to add you.
-          </p>
+                  {mode === "password" && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="password">Password</Label>
+                        <Button type="button" variant="link" className={linkBtn} onClick={() => switchMode("reset")}>Forgot Password?</Button>
+                      </div>
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          required
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          autoComplete="current-password"
+                          className="pr-16"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowPassword((v) => !v)}
+                          aria-pressed={showPassword}
+                          aria-controls="password"
+                          className="absolute inset-y-0.5 right-0.5 h-8 text-caption text-slate-600"
+                        >
+                          {showPassword ? "Hide" : "Show"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  <Button type="submit" size="lg" disabled={busy} className={`${brandCta} w-full`}>{label}</Button>
+                  {error && <StatusMessage tone="err" className="mt-0">{error}</StatusMessage>}
+                  {mode === "reset" && (
+                    <Button type="button" variant="link" className={linkBtn} onClick={() => switchMode("password")}>Back to Sign In</Button>
+                  )}
+                </form>
+              )}
+            </CardContent>
+          </Card>
+          <p className="mt-6 text-center text-caption text-slate-600">Need access? Ask your Lead Daddy admin to add you.</p>
           <LegalLinks className="mt-3" />
         </div>
       </main>

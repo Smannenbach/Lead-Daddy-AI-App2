@@ -1,7 +1,8 @@
 "use client";
 
 import { STAGES, type StageKey } from "@/lib/crm/model";
-export { btn as btnCls, btnPrimary as btnPrimaryCls, input as inputCls } from "@/components/ui/styles";
+import { Badge } from "@/components/ui/badge";
+import { tone } from "@/components/ui/styles";
 
 export const STAGE_STYLES: Record<StageKey, { chip: string; dot: string }> = {
   new: { chip: "bg-sky-50 text-sky-700 ring-sky-200", dot: "bg-sky-500" },
@@ -20,10 +21,10 @@ export function stageLabel(key: StageKey): string {
 export function StageChip({ stage }: { stage: StageKey }) {
   const s = STAGE_STYLES[stage];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-caption font-semibold ring-1 ring-inset ${s.chip}`}>
+    <Badge variant="outline" className={`gap-1.5 border-transparent text-caption font-semibold ring-1 ring-inset ${s.chip}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
       {stageLabel(stage)}
-    </span>
+    </Badge>
   );
 }
 
@@ -44,7 +45,7 @@ export function StatusText({ value }: { value: string }) {
 }
 
 export function Tag({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-caption font-semibold text-indigo-800">{children}</span>;
+  return <Badge variant="outline" className={tone.brand}>{children}</Badge>;
 }
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });

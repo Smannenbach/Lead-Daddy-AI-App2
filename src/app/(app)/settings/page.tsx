@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getJson } from "@/lib/client/api";
 import { PageBody, PageHeader } from "@/components/app/AppShell";
-import { card, cardHeader, h2 } from "@/components/ui/styles";
+import { Panel } from "@/components/app/Panel";
 
 // Read-only for now: shows what the app is using. Nothing here changes settings.
 export default function SettingsPage() {
@@ -38,8 +38,7 @@ export default function SettingsPage() {
   return (
     <PageBody>
       <PageHeader subtitle="What this account is using. Changes come later." />
-      <section className={`${card} max-w-2xl`}>
-        <div className={cardHeader}><h2 className={h2}>Account</h2></div>
+      <Panel id="account" title="Account" className="max-w-2xl" bodyClassName="p-0">
         <dl className="divide-y divide-slate-100 text-body">
           {rows.map(([k, v]) => (
             <div key={k} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]">
@@ -53,7 +52,7 @@ export default function SettingsPage() {
           <span aria-hidden="true" className="mx-2 text-slate-300">·</span>
           <Link href="/terms" className="font-medium text-indigo-600 hover:text-indigo-700">Terms of Service</Link>
         </div>
-      </section>
+      </Panel>
     </PageBody>
   );
 }

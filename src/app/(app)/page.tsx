@@ -7,7 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import { getJson } from "@/lib/client/api";
 import { PageBody, PageHeader } from "@/components/app/AppShell";
 import { AddLeadCard, ImportCard, ScrapeCard } from "@/components/app/LeadTools";
-import { btn, btnDanger, card, h2, muted } from "@/components/ui/styles";
+import { muted } from "@/components/ui/styles";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/app/Panel";
 import { Spinner } from "@/components/ui/Status";
 import { AlertTriangle } from "lucide-react";
 import { ConsentBadge } from "@/components/ui/ConsentBadge";
@@ -78,30 +82,28 @@ export default function Home() {
       <PageHeader subtitle="Add leads three ways, then work them in Leads and Campaigns." />
 
       {Object.keys(errors).length > 0 && (
-        <div role="alert" className="mb-6 flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-body text-red-700 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex gap-2">
-            <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-red-500" />
-            <div>
-            <p className="font-semibold">{sessionExpired ? "You've been signed out." : "Part of this page didn't load."}</p>
-            <ul className="mt-1 space-y-0.5">
+        <Alert role="alert" className="mb-6 border-red-200 bg-red-50 text-red-700 [&>svg]:text-red-500">
+          <AlertTriangle aria-hidden />
+          <AlertTitle className="font-semibold">{sessionExpired ? "You've been signed out." : "Part of this page didn't load."}</AlertTitle>
+          <AlertDescription className="text-red-700">
+            <ul className="space-y-0.5">
               {Object.entries(errors).map(([what, e]) => <li key={what}><span className="font-medium">{what}:</span> {e.message}</li>)}
             </ul>
-            </div>
-          </div>
-          {sessionExpired ? (
-            <button onClick={signInAgain} className={`${btnDanger} shrink-0`}>Sign In Again</button>
-          ) : (
-            <button onClick={loadAll} className={`${btn} shrink-0`}>Retry</button>
-          )}
-        </div>
+            {sessionExpired ? (
+              <Button size="sm" className="mt-2 bg-red-600 text-white hover:bg-red-700" onClick={signInAgain}>Sign In Again</Button>
+            ) : (
+              <Button size="sm" variant="outline" className="mt-2" onClick={loadAll}>Retry</Button>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
 
       <dl className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {stats.map((s) => (
-          <div key={s.label} className={`${card} p-4`}>
+          <Card key={s.label} className="gap-1 px-4 py-4 shadow">
             <dt className="text-caption font-medium text-slate-500">{s.label}</dt>
-            <dd className="mt-1 text-display font-bold tabular-nums">{s.value}</dd>
-          </div>
+            <dd className="text-display font-bold tabular-nums">{s.value}</dd>
+          </Card>
         ))}
       </dl>
 
@@ -111,11 +113,12 @@ export default function Home() {
         <ScrapeCard onDone={loadLeads} />
       </div>
 
-      <section className={`${card} mt-6`}>
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <h2 className={h2}>Newest Leads</h2>
-          <Link href="/crm" className="text-body font-medium text-indigo-600 hover:text-indigo-700">See All Leads</Link>
-        </div>
+      <Panel
+        className="mt-6"
+        title="Newest Leads"
+        action={<Link href="/crm" className="text-body font-medium text-indigo-600 hover:text-indigo-700">See All Leads</Link>}
+        bodyClassName="p-0"
+      >
         {leads === null ? (
           <div className="p-4"><Spinner label="Loading leads…" /></div>
         ) : leads.length === 0 ? (
@@ -135,7 +138,7 @@ export default function Home() {
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
     </PageBody>
   );
 }

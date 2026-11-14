@@ -1,28 +1,34 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Info, Loader2, XCircle } from "lucide-react";
-import { resultErr, resultInfo, resultOk, resultWarn } from "@/components/ui/styles";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
 export type Tone = "ok" | "err" | "warn" | "info";
 
-const STYLE: Record<Tone, string> = { ok: resultOk, err: resultErr, warn: resultWarn, info: resultInfo };
+const STYLE: Record<Tone, string> = {
+  ok: "border-emerald-200 bg-emerald-100 text-emerald-800 [&>svg]:text-emerald-600",
+  err: "border-red-200 bg-red-50 text-red-700 [&>svg]:text-red-500",
+  warn: "border-amber-200 bg-amber-100 text-amber-900 [&>svg]:text-amber-500",
+  info: "border-slate-200 bg-slate-100 text-slate-700 [&>svg]:text-slate-500",
+};
 const ICON = { ok: CheckCircle2, err: XCircle, warn: AlertTriangle, info: Info };
 
-/** A message box. Status color is always paired with an icon and words. */
+/** shadcn Alert with a status tone. Color is always paired with an icon and words. */
 export function StatusMessage({ tone, children, className = "" }: { tone: Tone; children: React.ReactNode; className?: string }) {
   const Icon = ICON[tone];
   return (
-    <div role={tone === "err" ? "alert" : "status"} className={`${STYLE[tone]} ${className}`}>
-      <Icon aria-hidden="true" className={tone === "ok" ? "text-emerald-600" : tone === "err" ? "text-red-500" : tone === "warn" ? "text-amber-500" : "text-slate-500"} />
-      <div className="min-w-0">{children}</div>
-    </div>
+    <Alert role={tone === "err" ? "alert" : "status"} className={cn("mt-3", STYLE[tone], className)}>
+      <Icon aria-hidden="true" />
+      <AlertDescription className="text-current">{children}</AlertDescription>
+    </Alert>
   );
 }
 
 /** Brand spinner for loading states. */
 export function Spinner({ label, className = "" }: { label?: string; className?: string }) {
   return (
-    <span role="status" className={`inline-flex items-center gap-2 text-body text-slate-600 ${className}`}>
+    <span role="status" className={cn("inline-flex items-center gap-2 text-body text-slate-600", className)}>
       <Loader2 aria-hidden="true" className="size-4 animate-spin text-indigo-600" />
       {label}
     </span>

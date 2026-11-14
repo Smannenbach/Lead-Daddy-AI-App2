@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { getJson, sendJson } from "@/lib/client/api";
 import { PageBody, PageHeader } from "@/components/app/AppShell";
-import { Dialog, useDialogs } from "@/components/ui/Dialog";
+import { useDialogs } from "@/components/ui/app-dialogs";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { CheckField, Field, Panel } from "@/components/app/Panel";
 import { Megaphone, Play, Rocket, Trash2 } from "lucide-react";
-import { btn, btnDanger, btnPrimary, card, cardHeader, h2, input } from "@/components/ui/styles";
+import { brandCta, dangerOutline } from "@/components/ui/styles";
 import { EmptyState, Spinner, StatusMessage } from "@/components/ui/Status";
 
 interface Campaign {
@@ -170,42 +174,28 @@ export default function CampaignsPage() {
       {dialogs}
       <PageHeader subtitle="Nothing sends until you review a campaign and launch it." />
 
-      <section className={`${card} mb-6`} aria-labelledby="new-h">
-        <div className={cardHeader}><h2 id="new-h" className={h2}>New Campaign</h2></div>
-        <form onSubmit={create} className="space-y-3 p-4">
+      <Panel id="new" title="New Campaign" icon={Megaphone} className="mb-6">
+        <form onSubmit={create} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-body">
-              <span className="mb-1 block font-medium text-slate-700">Name *</span>
-              <input required maxLength={200} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={`${input} w-full`} />
-            </label>
-            <label className="block text-body">
-              <span className="mb-1 block font-medium text-slate-700">Brief for the AI Writer</span>
-              <input maxLength={1000} value={form.brief} onChange={(e) => setForm({ ...form, brief: e.target.value })} placeholder="Offer, audience and goal" className={`${input} w-full`} />
-            </label>
+            <Field id="camp-name" label="Name" required maxLength={200} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Field id="camp-brief" label="Brief for the AI Writer" maxLength={1000} value={form.brief} onChange={(e) => setForm({ ...form, brief: e.target.value })} placeholder="Offer, audience and goal" />
           </div>
           <fieldset className="flex flex-wrap items-center gap-4 text-body text-slate-700">
             <legend className="mb-1 w-full font-medium">Channels</legend>
             {(["email", "sms", "call"] as const).map((c) => (
-              <label key={c} className="flex items-center gap-1.5">
-                <input type="checkbox" checked={form[c]} onChange={(e) => setForm({ ...form, [c]: e.target.checked })} className="accent-indigo-600" />
-                {CHANNEL_LABEL[c]}
-              </label>
+              <CheckField key={c} id={`camp-${c}`} checked={form[c]} onChange={(v) => setForm({ ...form, [c]: v })}>{CHANNEL_LABEL[c]}</CheckField>
             ))}
             <span className="text-caption text-slate-500">Texts and calls only go to leads with consent on file.</span>
           </fieldset>
-          <label className="flex items-center gap-2 text-body text-slate-700">
-            <input type="checkbox" checked={form.allLeads} onChange={(e) => setForm({ ...form, allLeads: e.target.checked })} className="accent-indigo-600" />
-            Add all current leads as recipients
-          </label>
-          <button type="submit" disabled={creating || !form.name.trim()} className={btnPrimary}>{creating ? "Writing the Copy…" : "Create Draft with AI Copy"}</button>
+          <CheckField id="camp-all" checked={form.allLeads} onChange={(v) => setForm({ ...form, allLeads: v })}>Add all current leads as recipients</CheckField>
+          <Button type="submit" disabled={creating || !form.name.trim()} className={brandCta}>{creating ? "Writing the Copy…" : "Create Draft with AI Copy"}</Button>
           {createResult && <StatusMessage tone={createResult.ok ? "ok" : "err"}>{createResult.text}</StatusMessage>}
         </form>
-      </section>
+      </Panel>
 
-      <section className={card} aria-labelledby="list-h">
-        <div className={cardHeader}><h2 id="list-h" className={h2}>Your Campaigns</h2></div>
+      <Panel id="list" title="Your Campaigns" bodyClassName="p-0">
         {loadError ? (
-          <div className="p-4"><StatusMessage tone="err" className="mt-0">{loadError} <button onClick={load} className="ml-1 font-semibold underline">Retry</button></StatusMessage></div>
+          <div className="p-4"><StatusMessage tone="err" className="mt-0">{loadError} <Button variant="link" onClick={load} className="ml-1 h-auto p-0 font-semibold text-current underline">Retry</Button></StatusMessage></div>
         ) : campaigns === null ? (
           <div className="p-4"><Spinner label="Loading campaigns…" /></div>
         ) : campaigns.length === 0 ? (
@@ -220,7 +210,7 @@ export default function CampaignsPage() {
                     <div className="min-w-0">
                       <p className="flex flex-wrap items-center gap-2 font-bold">
                         <span className="truncate">{c.name}</span>
-                        <span className={`rounded-md px-2.5 py-0.5 text-caption font-semibold capitalize ${STATUS_STYLE[c.status] ?? STATUS_STYLE.draft}`}>{c.status}</span>
+                        <Badge variant="outline" className={`border-transparent capitalize ${STATUS_STYLE[c.status] ?? STATUS_STYLE.draft}`}>{c.status}</Badge>
                       </p>
                       <p className="mt-0.5 text-body text-slate-500">
                         {c.recipients} recipient(s) · {c.channels.map((x) => CHANNEL_LABEL[x] ?? x).join(" then ") || "No steps yet"}
@@ -229,12 +219,12 @@ export default function CampaignsPage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {!running && (
-                        <button className={btnPrimary} disabled={busyRow === c.id} onClick={() => openReview(c)}><Rocket aria-hidden />{busyRow === c.id ? "Loading…" : "Review and Launch"}</button>
+                        <Button className={brandCta} disabled={busyRow === c.id} onClick={() => openReview(c)}><Rocket aria-hidden />{busyRow === c.id ? "Loading…" : "Review and Launch"}</Button>
                       )}
                       {c.status === "live" && c.pendingSteps > 0 && (
-                        <button className={btn} disabled={busyRow === c.id} onClick={() => runNext(c)}><Play aria-hidden />{busyRow === c.id ? "Sending…" : "Run Next Step"}</button>
+                        <Button variant="outline" disabled={busyRow === c.id} onClick={() => runNext(c)}><Play aria-hidden />{busyRow === c.id ? "Sending…" : "Run Next Step"}</Button>
                       )}
-                      <button className={btnDanger} disabled={busyRow === c.id} onClick={() => remove(c)}><Trash2 aria-hidden />Delete</button>
+                      <Button variant="outline" className={dangerOutline} disabled={busyRow === c.id} onClick={() => remove(c)}><Trash2 aria-hidden />Delete</Button>
                     </div>
                   </div>
                   {rowMsg[c.id] && <StatusMessage tone={rowMsg[c.id].ok ? "ok" : "err"}>{rowMsg[c.id].text}</StatusMessage>}
@@ -243,22 +233,13 @@ export default function CampaignsPage() {
             })}
           </ul>
         )}
-      </section>
+      </Panel>
 
-      <Dialog
-        open={review !== null}
-        wide
-        title={review ? `Review ${review.name}` : ""}
-        onClose={() => setReview(null)}
-        footer={
-          <>
-            <button className={btn} onClick={() => setReview(null)}>Cancel</button>
-            <button className={btnPrimary} disabled={!canLaunch || launching} onClick={launch}>
-              {launching ? "Launching…" : skippedLeads > 0 ? `Launch and Skip ${skippedLeads}` : "Launch"}
-            </button>
-          </>
-        }
-      >
+      <Dialog open={review !== null} onOpenChange={(o) => !o && setReview(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{review ? `Review ${review.name}` : ""}</DialogTitle>
+          </DialogHeader>
         {review && (
           <div className="space-y-5">
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -302,6 +283,14 @@ export default function CampaignsPage() {
             {launchError && <StatusMessage tone="err">{launchError}</StatusMessage>}
           </div>
         )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReview(null)}>Cancel</Button>
+            <Button className={brandCta} disabled={!canLaunch || launching} onClick={launch}>
+              <Rocket aria-hidden />
+              {launching ? "Launching…" : skippedLeads > 0 ? `Launch and Skip ${skippedLeads}` : "Launch"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </PageBody>
   );

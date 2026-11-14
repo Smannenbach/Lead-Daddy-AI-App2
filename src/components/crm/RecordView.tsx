@@ -20,8 +20,14 @@ import { STAGE_STYLES, StatusText, exactTime, relative } from "@/components/crm/
 import { ArrowLeft, Mail, ShieldCheck, Trash2 } from "lucide-react";
 import { PageBody } from "@/components/app/AppShell";
 import { Spinner, StatusMessage } from "@/components/ui/Status";
-import { useDialogs } from "@/components/ui/Dialog";
-import { btn, btnDanger, btnPrimary, card, cardHeader, h2, input } from "@/components/ui/styles";
+import { useDialogs } from "@/components/ui/app-dialogs";
+import { brandCta, dangerOutline } from "@/components/ui/styles";
+import { Panel } from "@/components/app/Panel";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 
 const DETAIL_FIELDS = CORE_FIELDS.filter((f) => !["name", "stage", "consent"].includes(f.key));
 const NAME_FIELDS: FieldDef[] = [
@@ -52,12 +58,8 @@ function ContactPermission({ record }: { record: CrmRecord }) {
   const status = record.consent;
   const allowed = status === "granted";
   return (
-    <section className={card} aria-labelledby="perm-h">
-      <div className={cardHeader}>
-        <h2 id="perm-h" className={h2}>Contact Permission</h2>
-        <StatusText value={status} />
-      </div>
-      <div className="space-y-3 p-4 text-body">
+    <Panel id="perm" title="Contact Permission" action={<StatusText value={status} />}>
+      <div className="space-y-3 text-body">
         <p className={`flex items-center gap-2 rounded-lg px-3 py-2 font-medium ${allowed ? "bg-emerald-100 text-emerald-800" : status === "revoked" ? "bg-red-50 text-red-700" : "bg-amber-100 text-amber-900"}`}>
           <ShieldCheck aria-hidden className={`size-4 shrink-0 ${allowed ? "text-emerald-600" : status === "revoked" ? "text-red-500" : "text-amber-500"}`} />
           {allowed
@@ -101,7 +103,7 @@ function ContactPermission({ record }: { record: CrmRecord }) {
           </p>
         )}
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -248,9 +250,15 @@ export default function RecordView({ id }: { id: string }) {
   return (
     <PageBody>
       {dialogs}
-      <div className="mb-3 text-body text-slate-500">
-        <Link href="/crm" className="font-medium text-indigo-600 hover:text-indigo-700">Leads</Link> / <span className="text-slate-700">{displayName(record)}</span>
-      </div>
+      <Breadcrumb className="mb-3">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild><Link href="/crm" className="font-medium text-indigo-600 hover:text-indigo-700">Leads</Link></BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem><BreadcrumbPage className="max-w-[60vw] truncate text-slate-700">{displayName(record)}</BreadcrumbPage></BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
       <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
@@ -258,21 +266,21 @@ export default function RecordView({ id }: { id: string }) {
           <p className="truncate text-body text-slate-500">{[record.job_title, record.company].filter(Boolean).join(" · ") || "No company yet"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className={btn} disabled={Boolean(busy) || (!record.email && !record.phone)} onClick={verify}>
+          <Button variant="outline" disabled={Boolean(busy) || (!record.email && !record.phone)} onClick={verify}>
             <ShieldCheck aria-hidden />
             {busy === "Verifying" ? "Verifying…" : busy === "Checking cost" ? "Checking Cost…" : "Verify (Uses Credits)"}
-          </button>
-          {record.email && <a className={btn} href={`mailto:${record.email}`}><Mail aria-hidden />Email</a>}
-          <button className={btnDanger} disabled={Boolean(busy)} onClick={deleteLead}><Trash2 aria-hidden />{busy === "Deleting" ? "Deleting…" : "Delete"}</button>
+          </Button>
+          {record.email && <Button variant="outline" asChild><a href={`mailto:${record.email}`}><Mail aria-hidden />Email</a></Button>}
+          <Button variant="outline" className={dangerOutline} disabled={Boolean(busy)} onClick={deleteLead}><Trash2 aria-hidden />{busy === "Deleting" ? "Deleting…" : "Delete"}</Button>
         </div>
       </header>
 
-      <ol className={`${card} mb-5 flex overflow-x-auto`} aria-label="Pipeline stage">
+      <Card className="mb-5 flex-row gap-0 overflow-x-auto py-0 shadow" role="list" aria-label="Pipeline stage">
         {STAGES.map((s, i) => {
           const active = s.key === record.stage;
           const passed = i < stageIdx && record.stage !== "lost";
           return (
-            <li key={s.key} className="min-w-[110px] flex-1">
+            <div key={s.key} role="listitem" className="min-w-[110px] flex-1">
               <button
                 disabled={Boolean(busy) || active}
                 onClick={() => patch({ stage: s.key as StageKey }, "Moving")}
@@ -284,27 +292,25 @@ export default function RecordView({ id }: { id: string }) {
                 {passed ? <span aria-hidden>✓</span> : <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-white" : STAGE_STYLES[s.key].dot}`} />}
                 {s.label}
               </button>
-            </li>
+            </div>
           );
         })}
-      </ol>
+      </Card>
 
       {message && <StatusMessage tone={message.error ? "err" : "ok"} className="mb-4 mt-0">{message.text}</StatusMessage>}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
         <div className="space-y-5">
           {formAnswer && (
-            <section className={card} aria-labelledby="answer-h">
-              <div className={cardHeader}><h2 id="answer-h" className={h2}>Form Answer</h2></div>
-              <div className="p-4 text-body">
+            <Panel id="answer" title="Form Answer">
+              <div className="text-body">
                 <p className="font-medium text-slate-500">{labels[FORM_ANSWER_KEY] ?? "What are you looking to finance?"}</p>
                 <p className="mt-1 whitespace-pre-wrap text-slate-900">{formAnswer}</p>
               </div>
-            </section>
+            </Panel>
           )}
 
-          <section className={card} aria-labelledby="details-h">
-            <div className={cardHeader}><h2 id="details-h" className={h2}>Details</h2></div>
+          <Panel id="details" title="Details" bodyClassName="p-0">
             <dl className="divide-y divide-slate-100">
               {[...NAME_FIELDS, ...DETAIL_FIELDS].map((f) => (
                 <div key={f.key} className="grid grid-cols-[120px_1fr] items-center gap-3 px-4 py-2 text-body sm:grid-cols-[140px_1fr]">
@@ -320,27 +326,26 @@ export default function RecordView({ id }: { id: string }) {
                 <div key={f.key} className="grid grid-cols-[120px_1fr_auto] items-center gap-3 px-4 py-2 text-body sm:grid-cols-[140px_1fr_auto]">
                   <dt className="truncate text-slate-500" title={f.label}>{f.label}</dt>
                   <dd className="min-w-0"><EditableCell record={record} field={f} onSave={save} /></dd>
-                  <button className="text-caption font-medium text-slate-500 hover:text-red-700" onClick={() => patch({ custom: { [f.key.slice(7)]: "" } }, "Removing")} aria-label={`Remove ${f.label}`}>Remove</button>
+                  <Button variant="ghost" size="xs" className="text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => patch({ custom: { [f.key.slice(7)]: "" } }, "Removing")} aria-label={`Remove ${f.label}`}>Remove</Button>
                 </div>
               ))}
             </dl>
             <form onSubmit={addField} className="flex flex-col gap-2 border-t border-slate-200 p-4 sm:flex-row">
-              <input className={`${input} sm:w-44`} placeholder="Field name, like Loan type" maxLength={60} value={newLabel} onChange={(e) => setNewLabel(e.target.value)} aria-label="New field name" />
-              <input className={`${input} flex-1`} placeholder="Value" maxLength={500} value={newVal} onChange={(e) => setNewVal(e.target.value)} aria-label="New field value" />
-              <button className={btn} disabled={Boolean(busy) || !newLabel.trim() || !newVal.trim()}>{busy === "Adding field" ? "Adding…" : "Add Field"}</button>
+              <Input className="sm:w-48" placeholder="Field name, like Loan type" maxLength={60} value={newLabel} onChange={(e) => setNewLabel(e.target.value)} aria-label="New field name" />
+              <Input className="flex-1" placeholder="Value" maxLength={500} value={newVal} onChange={(e) => setNewVal(e.target.value)} aria-label="New field value" />
+              <Button type="submit" variant="outline" disabled={Boolean(busy) || !newLabel.trim() || !newVal.trim()}>{busy === "Adding field" ? "Adding…" : "Add Field"}</Button>
             </form>
-          </section>
+          </Panel>
         </div>
 
         <div className="space-y-5">
           <ContactPermission record={record} />
 
-          <section className={`${card} flex flex-col`} aria-labelledby="activity-h">
-            <div className={cardHeader}><h2 id="activity-h" className={h2}>Activity</h2></div>
+          <Panel id="activity" title="Activity" bodyClassName="p-0">
             <form onSubmit={addNote} className="border-b border-slate-200 p-4">
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={4000} placeholder="Log a call, meeting or note…" className={`${input} w-full resize-y`} aria-label="New note" />
+              <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={4000} placeholder="Log a call, meeting or note…" className="resize-y" aria-label="New note" />
               <div className="mt-2 flex justify-end">
-                <button className={btnPrimary} disabled={Boolean(busy) || !note.trim()}>{busy === "Adding note" ? "Adding…" : "Add Note"}</button>
+                <Button type="submit" className={brandCta} disabled={Boolean(busy) || !note.trim()}>{busy === "Adding note" ? "Adding…" : "Add Note"}</Button>
               </div>
             </form>
             <ol className="max-h-[640px] flex-1 space-y-4 overflow-y-auto p-4">
@@ -358,12 +363,12 @@ export default function RecordView({ id }: { id: string }) {
                     </p>
                   </div>
                   {t.type === "note" && t.id && (
-                    <button onClick={() => deleteNote(t)} className="self-start text-caption font-medium text-slate-500 hover:text-red-700" aria-label="Delete note">Delete</button>
+                    <Button variant="ghost" size="xs" onClick={() => deleteNote(t)} className="self-start text-slate-500 hover:bg-red-50 hover:text-red-700" aria-label="Delete note">Delete</Button>
                   )}
                 </li>
               ))}
             </ol>
-          </section>
+          </Panel>
         </div>
       </div>
     </PageBody>

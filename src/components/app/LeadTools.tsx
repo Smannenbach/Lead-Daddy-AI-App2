@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { FileUp, ScanSearch, UserPlus } from "lucide-react";
-import { btn, btnPrimary, card, cardHeader, h2, input, muted } from "@/components/ui/styles";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CheckField, Field, Panel } from "@/components/app/Panel";
 import { StatusMessage, type Tone } from "@/components/ui/Status";
+import { brandCta, muted } from "@/components/ui/styles";
 
 type Result = { tone: Tone; text: React.ReactNode } | null;
 
@@ -59,41 +63,37 @@ export function AddLeadCard({ onDone }: { onDone?: () => void }) {
     }
   }
 
-  const f = (key: Exclude<keyof typeof EMPTY, "tcpa_consent">, label: string, opts: { type?: string; required?: boolean; max?: number; auto?: string } = {}) => (
-    <label className="block text-body">
-      <span className="mb-1 block font-medium text-slate-700">{label}{opts.required ? " *" : ""}</span>
-      <input
-        type={opts.type ?? "text"}
-        required={opts.required}
-        maxLength={opts.max ?? 200}
-        autoComplete={opts.auto}
-        value={form[key]}
-        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-        className={`${input} w-full`}
-      />
-    </label>
+  const f = (key: Exclude<keyof typeof EMPTY, "tcpa_consent">, label: string, opts: { type?: string; required?: boolean; max?: number } = {}) => (
+    <Field
+      id={`add-${key}`}
+      label={label}
+      type={opts.type ?? "text"}
+      required={opts.required}
+      maxLength={opts.max ?? 200}
+      autoComplete="off"
+      value={form[key]}
+      onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+    />
   );
 
   return (
-    <section className={card} aria-labelledby="add-lead-h">
-      <div className={cardHeader}><h2 id="add-lead-h" className={`${h2} flex items-center gap-2`}><UserPlus aria-hidden className="size-4 text-indigo-600" />Add a Lead</h2></div>
-      <form onSubmit={submit} className="space-y-3 p-4">
+    <Panel id="add-lead" title="Add a Lead" icon={UserPlus}>
+      <form onSubmit={submit} className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
-          {f("first_name", "First Name", { required: true, max: 100, auto: "off" })}
-          {f("last_name", "Last Name", { max: 100, auto: "off" })}
-          {f("email", "Email", { type: "email", max: 254, auto: "off" })}
-          {f("phone", "Phone", { type: "tel", max: 20, auto: "off" })}
+          {f("first_name", "First Name", { required: true, max: 100 })}
+          {f("last_name", "Last Name", { max: 100 })}
+          {f("email", "Email", { type: "email", max: 254 })}
+          {f("phone", "Phone", { type: "tel", max: 20 })}
           {f("company", "Company")}
           {f("job_title", "Title", { max: 150 })}
         </div>
-        <label className="flex items-start gap-2 text-body text-slate-600">
-          <input type="checkbox" checked={form.tcpa_consent} onChange={(e) => setForm({ ...form, tcpa_consent: e.target.checked })} className="mt-0.5 size-4 accent-indigo-600" />
-          <span>Lead granted TCPA consent for SMS/call outreach</span>
-        </label>
-        <button type="submit" disabled={busy || !form.first_name.trim()} className={btnPrimary}>{busy ? "Adding…" : "Add Lead"}</button>
+        <CheckField id="add-consent" checked={form.tcpa_consent} onChange={(v) => setForm({ ...form, tcpa_consent: v })}>
+          Lead granted TCPA consent for SMS/call outreach
+        </CheckField>
+        <Button type="submit" disabled={busy || !form.first_name.trim()} className={brandCta}>{busy ? "Adding…" : "Add Lead"}</Button>
         <ResultBox result={result} />
       </form>
-    </section>
+    </Panel>
   );
 }
 
@@ -132,37 +132,36 @@ export function ImportCard({ onDone }: { onDone?: () => void }) {
   }
 
   return (
-    <section className={card} aria-labelledby="import-h">
-      <div className={cardHeader}><h2 id="import-h" className={`${h2} flex items-center gap-2`}><FileUp aria-hidden className="size-4 text-indigo-600" />Import a CSV</h2></div>
-      <div className="p-4">
-        <p className={muted}>
-          Use a header row like first_name, last_name, email, phone, company, title. Each row needs an email or a phone. Duplicate emails are skipped.
-        </p>
-        <label className={`${btn} mt-3 cursor-pointer ${busy ? "pointer-events-none opacity-50" : ""}`}>
-          {busy ? "Importing…" : "Choose a CSV File"}
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            className="sr-only"
-            disabled={busy}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) upload(file);
-              e.target.value = "";
-            }}
-          />
-        </label>
-        <ResultBox result={result} />
-        {skipped.length > 0 && (
-          <details className="mt-2 text-body text-slate-600" open={skipped.length <= 5}>
-            <summary className="cursor-pointer font-medium">Skipped Rows</summary>
-            <ul className="mt-1 space-y-0.5">
-              {skipped.slice(0, 100).map((s) => <li key={`${s.row}-${s.reason}`}>Row {s.row}: {s.reason}</li>)}
-            </ul>
-          </details>
-        )}
+    <Panel id="import" title="Import a CSV" icon={FileUp}>
+      <p className={muted}>
+        Use a header row like first_name, last_name, email, phone, company, title. Each row needs an email or a phone. Duplicate emails are skipped.
+      </p>
+      <div className="mt-3 space-y-1.5">
+        <Label htmlFor="import-file" className="text-body font-medium text-slate-700">CSV File</Label>
+        <Input
+          id="import-file"
+          type="file"
+          accept=".csv,text/csv"
+          disabled={busy}
+          className="cursor-pointer file:mr-3 file:font-medium file:text-indigo-600"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) upload(file);
+            e.target.value = "";
+          }}
+        />
+        {busy && <p className="text-caption text-slate-600">Importing…</p>}
       </div>
-    </section>
+      <ResultBox result={result} />
+      {skipped.length > 0 && (
+        <details className="mt-2 text-body text-slate-600" open={skipped.length <= 5}>
+          <summary className="cursor-pointer font-medium">Skipped Rows</summary>
+          <ul className="mt-1 space-y-0.5">
+            {skipped.slice(0, 100).map((s) => <li key={`${s.row}-${s.reason}`}>Row {s.row}: {s.reason}</li>)}
+          </ul>
+        </details>
+      )}
+    </Panel>
   );
 }
 
@@ -204,25 +203,15 @@ export function ScrapeCard({ onDone }: { onDone?: () => void }) {
   }
 
   return (
-    <section className={card} aria-labelledby="scrape-h">
-      <div className={cardHeader}><h2 id="scrape-h" className={`${h2} flex items-center gap-2`}><ScanSearch aria-hidden className="size-4 text-indigo-600" />Scrape a Page</h2></div>
-      <form onSubmit={submit} className="space-y-3 p-4">
-        <label className="block text-body">
-          <span className="mb-1 block font-medium text-slate-700">Page Address</span>
-          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/team" inputMode="url" maxLength={2048} className={`${input} w-full`} />
-        </label>
-        <label className="flex items-center gap-2 text-body text-slate-600">
-          <input type="checkbox" checked={create} onChange={(e) => setCreate(e.target.checked)} className="accent-indigo-600" />
-          Add the people it finds as leads
-        </label>
-        <label className={`flex items-center gap-2 text-body ${create ? "text-slate-600" : "text-slate-500"}`}>
-          <input type="checkbox" checked={verify} disabled={!create} onChange={(e) => setVerify(e.target.checked)} className="accent-indigo-600" />
-          Also verify them (uses verification credits)
-        </label>
-        <button type="submit" disabled={busy || !url.trim()} className={btnPrimary}>{busy ? "Reading the Page…" : "Scrape and Summarize"}</button>
+    <Panel id="scrape" title="Scrape a Page" icon={ScanSearch}>
+      <form onSubmit={submit} className="space-y-3">
+        <Field id="scrape-url" label="Page Address" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/team" inputMode="url" maxLength={2048} />
+        <CheckField id="scrape-create" checked={create} onChange={setCreate}>Add the people it finds as leads</CheckField>
+        <CheckField id="scrape-verify" checked={verify} onChange={setVerify} disabled={!create}>Also verify them (uses verification credits)</CheckField>
+        <Button type="submit" disabled={busy || !url.trim()} className={brandCta}>{busy ? "Reading the Page…" : "Scrape and Summarize"}</Button>
         <ResultBox result={result} />
         {digest && <p className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 text-body text-slate-700">{digest}</p>}
       </form>
-    </section>
+    </Panel>
   );
 }

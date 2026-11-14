@@ -1,19 +1,120 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 /*
- * Lead Daddy design tokens (design system notes, 2026-11-14).
- * Light only for the app shell. One family: the system sans stack.
- * Sizes for page-title, h1, h2, display, label, eyebrow and hero were not given in the
- * notes; the values below are our pick and can be swapped for the main app's exact ones.
+ * Lead Daddy design system on shadcn/ui (new-york, slate).
+ * - shadcn primitives read the semantic tokens below. Their `primary` is near-black;
+ *   brand CTAs pass indigo classes explicitly.
+ * - The sidebar tokens carry the brand: white panel, indigo-600 active item.
+ * - Radius 8px: rounded-md = 6px (controls), rounded-lg = 8px, rounded-xl = 12px (cards).
+ * - Dark mode exists only in the tokens (.dark); the app shell is light only.
+ * Type sizes for page-title, h1, h2, display, label, eyebrow and hero were not given in
+ * the design notes; the values here are our pick.
  */
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.208 0.042 265.755);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.704 0.04 256.788);
+
+  /* Brand sidebar: white panel, slate-200 border, indigo-600 active item */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.446 0.043 257.281);          /* slate-600 */
+  --sidebar-primary: oklch(0.511 0.262 276.966);             /* indigo-600 */
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.968 0.007 247.896);              /* slate-100 */
+  --sidebar-accent-foreground: oklch(0.129 0.042 264.695);   /* slate-900 */
+  --sidebar-border: oklch(0.929 0.013 255.508);              /* slate-200 */
+  --sidebar-ring: oklch(0.673 0.182 276.935);                /* indigo-400 */
+}
+
+.dark {
+  --background: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.929 0.013 255.508);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.551 0.027 264.364);
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.585 0.233 277.117);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.585 0.233 277.117);
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
 @theme {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-
-  --text-caption: 0.75rem;      /* 12px */
+  --text-caption: 0.75rem;
   --text-caption--line-height: 1rem;
-  --text-body: 0.875rem;        /* 14px */
+  --text-body: 0.875rem;
   --text-body--line-height: 1.25rem;
-  --text-label: 0.6875rem;      /* 11px, uppercase group labels */
+  --text-label: 0.6875rem;
   --text-label--line-height: 1rem;
   --text-label--letter-spacing: 0.05em;
   --text-h2: 1rem;
@@ -22,7 +123,7 @@
   --text-h1--line-height: 1.75rem;
   --text-page-title: 1.125rem;
   --text-page-title--line-height: 1.75rem;
-  --text-display: 1.875rem;     /* KPI figures */
+  --text-display: 1.875rem;
   --text-display--line-height: 2.25rem;
   --text-eyebrow: 0.75rem;
   --text-eyebrow--letter-spacing: 0.12em;
@@ -30,18 +131,16 @@
   --text-hero--line-height: 1.1;
 }
 
-:root {
-  --background: #f8fafc; /* slate-50 */
-  --foreground: #0f172a; /* slate-900 */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-slate-50 font-sans text-slate-900;
+  }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-}
-
-/* App-level focus: 2px indigo-400 ring on anything keyboard focused. */
+/* App-level focus: 2px indigo-400 ring on keyboard focus (shadcn controls add their own ring too). */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--color-indigo-400);
   outline-offset: 2px;
