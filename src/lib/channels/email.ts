@@ -13,7 +13,7 @@ interface EmailOpts {
 async function sendViaSendGrid(opts: EmailOpts): Promise<{ id: string }> {
   const key = process.env.SENDGRID_API_KEY;
   if (!key) throw new Error("SENDGRID_API_KEY not configured");
-  const from = opts.from ?? process.env.EMAIL_FROM ?? "LeadDaddy.ai <steve@loandaddy.ai>";
+  const from = opts.from ?? process.env.EMAIL_FROM ?? "Lead Daddy <steve@loandaddy.ai>";
   const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },

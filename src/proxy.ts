@@ -1,6 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/** Signed-in app pages (sidebar). Each must also be in config.matcher below. */
+export const APP_PAGES = ["/crm", "/pipeline", "/campaigns", "/import", "/scraper", "/settings"];
+
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -24,8 +27,11 @@ export async function proxy(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
   const isProtected =
-    request.nextUrl.pathname === "/" ||
+    path === "/" ||
+    APP_PAGES.some((p) => path === p || path.startsWith(`${p}/`)) ||
+    path.startsWith("/api/verify") ||
     request.nextUrl.pathname.startsWith("/crm") ||
     request.nextUrl.pathname.startsWith("/api/crm") ||
     request.nextUrl.pathname.startsWith("/api/leads") ||
@@ -36,6 +42,11 @@ export async function proxy(request: NextRequest) {
   // (requireUser for users, x-cron-secret for the runner) and the edge runtime
   // cannot read non-NEXT_PUBLIC env vars, so a proxy-level cron bypass can't work.
   if (isProtected && !user) {
+    // API callers get the same 401 JSON every route returns (fetch would otherwise
+    // follow a redirect and get the login page back as a 200). Pages still redirect.
+    if (request.nextUrl.pathname.startsWith("/api/")) {
+      return NextResponse.json({ code: "unauthorized", error: "Your session has expired. Sign in again." }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
@@ -49,5 +60,20 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/crm/:path*", "/api/crm/:path*", "/api/leads/:path*", "/api/scrape", "/api/social/:path*", "/api/ai"],
+  matcher: [
+    "/",
+    "/login",
+    "/crm/:path*",
+    "/pipeline/:path*",
+    "/campaigns/:path*",
+    "/import/:path*",
+    "/scraper/:path*",
+    "/settings/:path*",
+    "/api/crm/:path*",
+    "/api/leads/:path*",
+    "/api/scrape",
+    "/api/social/:path*",
+    "/api/ai",
+    "/api/verify/:path*",
+  ],
 };

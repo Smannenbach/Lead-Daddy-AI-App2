@@ -1,4 +1,8 @@
+import { serverError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
+import { consentRecord } from "@/lib/consent";
+import { normalizePhone } from "@/lib/phone";
+import { tooLong } from "@/lib/leads/limits";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
@@ -19,7 +23,7 @@ export async function GET() {
     .is("deleted_at", null)
     .order("created_date", { ascending: false })
     .limit(200);
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("leads GET", error.message);
 
   const contacts = data ?? [];
   const [emailStatus, phoneStatus] = await Promise.all([
@@ -57,7 +61,13 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | { first_name?: string; last_name?: string; email?: string; phone?: string; company?: string; job_title?: string; tcpaConsent?: boolean }
     | null;
-  if (!body?.first_name?.trim()) return Response.json({ error: "first_name is required" }, { status: 400 });
+  if (!body?.first_name?.trim()) return Response.json({ code: "first_name_required", error: "Add a first name." }, { status: 400 });
+  for (const f of ["first_name", "last_name", "company", "job_title", "email"] as const) {
+    const err = tooLong(f, typeof body[f] === "string" ? body[f]!.trim() : null);
+    if (err) return Response.json({ code: "too_long", field: f, error: err }, { status: 400 });
+  }
+  const phone = normalizePhone(body.phone);
+  if (!phone.ok) return Response.json({ code: "invalid_phone", error: phone.error }, { status: 400 });
 
   const now = new Date().toISOString();
   const db = createServiceClient();
@@ -68,10 +78,15 @@ export async function POST(request: Request) {
       first_name: body.first_name.trim(),
       last_name: body.last_name?.trim() || null,
       email: body.email?.trim().toLowerCase() || null,
-      phone: body.phone?.trim() || null,
+      phone: phone.value,
       company: body.company?.trim() || null,
       job_title: body.job_title?.trim() || null,
-      custom_fields: body.tcpaConsent ? { tcpa_consent: "granted" } : {},
+      custom_fields: body.tcpaConsent
+        ? {
+            tcpa_consent: "granted",
+            consent_record: consentRecord({ granted: true, method: "rep_attested", source: "console:add-lead", wordingVersion: "console-add-lead-2026-11", at: now, capturedBy: auth.user.email ?? null }),
+          }
+        : {},
       lead_source: "manual",
       stage: "new",
       engagement_history: [{ type: "created", at: now, by: auth.user.email ?? null, detail: "Lead added manually" }],
@@ -80,7 +95,7 @@ export async function POST(request: Request) {
     })
     .select("id")
     .single();
-  if (error || !data) return Response.json({ error: error?.message ?? "insert failed" }, { status: 500 });
+  if (error || !data) return serverError("leads POST", error?.message ?? "insert failed");
 
   return Response.json({ id: data.id }, { status: 201 });
 }

@@ -155,7 +155,7 @@ describe("timeline", () => {
     const patch = sanitizePatch({ stage: "qualified", company: "Acme", custom: { state: "AZ" }, note: "Called, wants DSCR quote" });
     const h = historyFor({ stage: "new", company: "Acme", custom: {} }, patch, "steve@loandaddy.ai", "2026-11-09T00:00:00Z");
     expect(h.map((e) => e.type)).toEqual(["stage_changed", "field_changed", "note"]);
-    expect(h[0].detail).toBe("Stage: new → qualified");
+    expect(h[0].detail).toBe("Stage changed from New to Qualified");
   });
   it("caps history but never rewrites or drops older entries of other shapes", () => {
     const legacy = { date: "2026-10-01T00:00:00Z", type: "email_sent", description: "Sent email: Hello", outcome: "sent" };
@@ -174,7 +174,7 @@ describe("timeline", () => {
       { bogus: true },
       null,
     ]);
-    expect(t).toEqual([
+    expect(t.map(({ id, ...rest }) => (expect(id).toMatch(/^t_/), rest))).toEqual([
       { type: "system", at: "2026-10-01T00:00:00Z", by: null, detail: "Sent email: Hello" },
       { type: "note", at: "2026-10-02T00:00:00Z", by: null, detail: "Left voicemail" },
     ]);
@@ -189,5 +189,21 @@ describe("customFieldKeys + toCsv", () => {
     const lines = csv.split("\r\n");
     expect(lines[0]).toBe('"Name","Tags"');
     expect(lines[2].startsWith(`"'=HYPERLINK(""x"")`)).toBe(true);
+  });
+});
+
+describe("normalizeStage (shared Base44 table)", () => {
+  it("reads the capitalized values the database stores", async () => {
+    const { normalizeStage } = await import("@/lib/crm/model");
+    expect(normalizeStage("Qualified")).toBe("qualified");
+    expect(normalizeStage("Won")).toBe("won");
+  });
+  it("shows Base44 mortgage stages in the nearest column instead of New", async () => {
+    const { normalizeStage } = await import("@/lib/crm/model");
+    expect(normalizeStage("Prospect")).toBe("qualified");
+    expect(normalizeStage("Underwriting")).toBe("negotiation");
+    expect(normalizeStage("Closed")).toBe("won");
+    expect(normalizeStage("Nurture")).toBe("contacted");
+    expect(normalizeStage("Bogus")).toBe("new");
   });
 });

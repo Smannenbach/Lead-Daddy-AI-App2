@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LeadDaddy.ai",
+  title: { default: "Lead Daddy", template: "%s · Lead Daddy" },
   description: "AI-first outbound platform: scrape, verify, and engage leads by call, SMS, and email",
 };
 

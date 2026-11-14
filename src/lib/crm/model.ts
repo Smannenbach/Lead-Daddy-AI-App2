@@ -9,6 +9,10 @@
 //   - tcpa_consent stays in custom_fields.tcpa_consent and is NEVER writable from here
 //     (consent is captured only through the add-lead / capture flows that record it).
 
+import { readConsentRecord, type ConsentRecord } from "@/lib/consent";
+import { normalizePhone } from "@/lib/phone";
+import { LIMITS, tooLong } from "@/lib/leads/limits";
+
 export type StageKey = "new" | "contacted" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
 
 export const STAGES: ReadonlyArray<{ key: StageKey; label: string; tone: string }> = [
@@ -27,10 +31,28 @@ export function isStage(value: unknown): value is StageKey {
   return typeof value === "string" && STAGE_KEYS.has(value);
 }
 
-/** Unknown/legacy stage values are shown in the "new" column rather than disappearing. */
+/**
+ * crm_contact is shared with the Base44 app, whose pipeline uses mortgage stages.
+ * Those rows are shown in the nearest app2 column instead of all landing in "new".
+ * The stored value is never rewritten unless a user moves the lead.
+ */
+export const BASE44_STAGE_MAP: Readonly<Record<string, StageKey>> = {
+  lead: "new",
+  nurture: "contacted",
+  prospect: "qualified",
+  application: "proposal",
+  opportunity: "proposal",
+  underwriting: "negotiation",
+  approved: "negotiation",
+  closed: "won",
+  customer: "won",
+};
+
+/** Unknown stage values are shown in the "new" column rather than disappearing. */
 export function normalizeStage(value: unknown): StageKey {
   const v = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return isStage(v) ? v : "new";
+  if (isStage(v)) return v;
+  return BASE44_STAGE_MAP[v] ?? "new";
 }
 
 export type FieldType =
@@ -59,6 +81,7 @@ export const CORE_FIELDS: ReadonlyArray<FieldDef> = [
   { key: "job_title", label: "Title", type: "text", editable: true },
   { key: "email", label: "Email", type: "email", editable: true },
   { key: "phone", label: "Phone", type: "phone", editable: true },
+  { key: "consent", label: "Consent", type: "status", editable: false },
   { key: "stage", label: "Stage", type: "stage", editable: true },
   { key: "lead_score", label: "Score", type: "number", editable: true },
   { key: "estimated_value", label: "Value", type: "currency", editable: true },
@@ -68,12 +91,13 @@ export const CORE_FIELDS: ReadonlyArray<FieldDef> = [
   { key: "lead_source", label: "Source", type: "text", editable: true },
   { key: "email_status", label: "Email status", type: "status", editable: false },
   { key: "phone_status", label: "Phone status", type: "status", editable: false },
-  { key: "consent", label: "TCPA consent", type: "status", editable: false },
   { key: "created_date", label: "Created", type: "date", editable: false },
   { key: "updated_date", label: "Updated", type: "date", editable: false },
 ];
 
 export interface TimelineEntry {
+  /** Stable id for display entries (stored id, or a hash of the entry for older rows). */
+  id?: string;
   type: "created" | "stage_changed" | "field_changed" | "note" | "verified" | "system";
   at: string;
   by: string | null;
@@ -99,7 +123,11 @@ export interface CrmRecord {
   email_status: string;
   phone_status: string;
   consent: string;
+  /** How/where/when consent was recorded. null for leads created before consent records existed. */
+  consent_record: ConsentRecord | null;
   custom: Record<string, string>;
+  /** Display names for custom fields, keyed like `custom`. Missing = derived from the key. */
+  custom_labels: Record<string, string>;
   created_date: string;
   updated_date: string;
 }
@@ -129,6 +157,22 @@ export function readCustomFields(customFields: unknown): Record<string, string> 
     if (CUSTOM_KEY.test(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean")) out[k] = String(v);
   }
   return out;
+}
+
+/** Labels live next to the values: custom_fields.crm_field_labels = { key: "Display Name" }. */
+export function readCustomLabels(customFields: unknown): Record<string, string> {
+  const ns = asObject(asObject(customFields).crm_field_labels);
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(ns)) if (CUSTOM_KEY.test(k) && typeof v === "string" && v.trim()) out[k] = v;
+  return out;
+}
+
+export const CUSTOM_LABEL_MAX = 60;
+
+/** Server-side key for a display name: "QA Test Bad Name!!" -> "qa_test_bad_name". null if no letters. */
+export function keyFromLabel(label: string): string | null {
+  const key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40).replace(/_+$/, "");
+  return CUSTOM_KEY.test(key) ? key : null;
 }
 
 export interface ContactRow {
@@ -176,7 +220,9 @@ export function toRecord(row: ContactRow, emailStatus = "unverified", phoneStatu
     email_status: emailStatus,
     phone_status: phoneStatus,
     consent: typeof cf.tcpa_consent === "string" ? cf.tcpa_consent : "none",
+    consent_record: readConsentRecord(row.custom_fields),
     custom: readCustomFields(row.custom_fields),
+    custom_labels: readCustomLabels(row.custom_fields),
     created_date: row.created_date,
     updated_date: row.updated_date,
   };
@@ -187,6 +233,12 @@ export function customFieldKeys(records: CrmRecord[]): string[] {
   const keys = new Set<string>();
   for (const r of records) for (const k of Object.keys(r.custom)) keys.add(k);
   return [...keys].sort();
+}
+
+/** Like customFieldDef but uses the stored display name when there is one. */
+export function customFieldDefLabeled(key: string, labels: Record<string, string>): FieldDef {
+  const def = customFieldDef(key);
+  return labels[key] ? { ...def, label: labels[key] } : def;
 }
 
 export function customFieldDef(key: string): FieldDef {
@@ -267,6 +319,7 @@ export const PRESET_VIEWS: ReadonlyArray<ViewState> = [
     filters: [
       { field: "email_status", op: "is", value: "valid" },
       { field: "stage", op: "is", value: "new" },
+      { field: "consent", op: "is", value: "granted" },
     ],
   },
   {
@@ -388,7 +441,7 @@ export function summarize(records: CrmRecord[], now: Date = new Date()): Summary
 
 // ── Writes: validation + history ───────────────────────────────────────────
 
-const RESERVED_CUSTOM = new Set(["tcpa_consent", "crm_fields", "sms_opt_out"]);
+const RESERVED_CUSTOM = new Set(["tcpa_consent", "crm_fields", "crm_field_labels", "sms_opt_out", "consent_record"]);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type PatchInput = Partial<
@@ -407,6 +460,8 @@ export type PatchInput = Partial<
     | "assigned_to"
     | "lead_source"
     | "custom"
+    | "custom_labels"
+    | "add_field"
     | "note",
     unknown
   >
@@ -431,11 +486,13 @@ export interface ColumnPatch {
 export interface SanitizedPatch {
   columns: ColumnPatch;
   custom: Record<string, string | null>;
+  /** Display names to store for custom fields (set when a field is added). */
+  customLabels?: Record<string, string>;
   note: string | null;
   errors: string[];
 }
 
-const TEXT_FIELDS = ["first_name", "last_name", "company", "job_title", "phone", "assigned_to", "lead_source"] as const;
+const TEXT_FIELDS = ["first_name", "last_name", "company", "job_title", "assigned_to", "lead_source"] as const;
 
 function cleanText(v: unknown, max = 200): string | null {
   if (typeof v !== "string" && typeof v !== "number") return null;
@@ -453,70 +510,122 @@ function cleanNumber(v: unknown, min: number, max: number): number | null | "inv
 export function sanitizePatch(input: unknown): SanitizedPatch {
   const out: SanitizedPatch = { columns: {}, custom: {}, note: null, errors: [] };
   if (!input || typeof input !== "object" || Array.isArray(input)) {
-    out.errors.push("body must be an object");
+    out.errors.push("Nothing to save.");
     return out;
   }
   const p = input as PatchInput;
-  for (const f of TEXT_FIELDS) if (f in p) out.columns[f] = cleanText(p[f]);
-  if ("first_name" in p && !out.columns.first_name) out.errors.push("first_name cannot be empty");
+  for (const f of TEXT_FIELDS) {
+    if (!(f in p)) continue;
+    const v = cleanText(p[f], Number.MAX_SAFE_INTEGER);
+    const err = tooLong(f, v);
+    if (err) out.errors.push(err);
+    else out.columns[f] = v;
+  }
+  if ("first_name" in p && !out.columns.first_name && !out.errors.some((e) => e.startsWith("First name"))) out.errors.push("First name can't be empty.");
+  if ("phone" in p) {
+    const ph = normalizePhone(p.phone);
+    if (ph.ok) out.columns.phone = ph.value;
+    else out.errors.push(ph.error);
+  }
   if ("email" in p) {
-    const e = cleanText(p.email)?.toLowerCase() ?? null;
-    if (e !== null && !EMAIL.test(e)) out.errors.push("email is not valid");
+    const e = cleanText(p.email, Number.MAX_SAFE_INTEGER)?.toLowerCase() ?? null;
+    if (tooLong("email", e)) out.errors.push(tooLong("email", e)!);
+    else if (e !== null && !EMAIL.test(e)) out.errors.push("Enter a valid email address.");
     else out.columns.email = e;
   }
   if ("stage" in p) {
     const s = typeof p.stage === "string" ? p.stage.trim().toLowerCase() : "";
     if (isStage(s)) out.columns.stage = s;
-    else out.errors.push(`stage must be one of ${STAGES.map((x) => x.key).join(", ")}`);
+    else out.errors.push(`Pick a stage: ${STAGES.map((x) => x.label).join(", ")}.`);
   }
   if ("lead_score" in p) {
     const n = cleanNumber(p.lead_score, 0, 100);
-    if (n === "invalid") out.errors.push("lead_score must be 0–100");
+    if (n === "invalid") out.errors.push("Score must be a number from 0 to 100.");
     else out.columns.lead_score = n;
   }
   if ("estimated_value" in p) {
     const n = cleanNumber(p.estimated_value, 0, 1e12);
-    if (n === "invalid") out.errors.push("estimated_value must be a positive number");
+    if (n === "invalid") out.errors.push("Estimated value must be a dollar amount of 0 or more.");
     else out.columns.estimated_value = n;
   }
   if ("tags" in p) {
     const raw = Array.isArray(p.tags) ? p.tags : typeof p.tags === "string" ? p.tags.split(",") : [];
     out.columns.tags = [
-      ...new Set(raw.filter((t): t is string => typeof t === "string").map((t) => t.trim().slice(0, 40)).filter(Boolean)),
-    ].slice(0, 25);
+      ...new Set(raw.filter((t): t is string => typeof t === "string").map((t) => t.trim()).filter(Boolean)),
+    ];
+    if (out.columns.tags.some((t) => tooLong("tag", t))) out.errors.push(tooLong("tag", "x".repeat(LIMITS.tag + 1))!);
+    if (out.columns.tags.length > 25) out.errors.push("A lead can have up to 25 tags.");
   }
   if ("next_follow_up" in p) {
     const d = cleanText(p.next_follow_up, 40);
-    if (d !== null && Number.isNaN(Date.parse(d))) out.errors.push("next_follow_up must be a date");
+    if (d !== null && Number.isNaN(Date.parse(d))) out.errors.push("Follow up date must be a real date.");
     else out.columns.next_follow_up = d;
   }
   if ("custom" in p) {
     const entries = Object.entries(asObject(p.custom));
-    if (entries.length > 50) out.errors.push("too many custom fields in one update");
+    if (entries.length > 50) out.errors.push("Change up to 50 custom fields at a time.");
     for (const [k, v] of entries.slice(0, 50)) {
       if (!CUSTOM_KEY.test(k) || RESERVED_CUSTOM.has(k)) {
-        out.errors.push(`custom field '${k}' is not allowed`);
+        out.errors.push(`"${k}" isn't a valid field name. Use letters, numbers or underscores, starting with a letter.`);
         continue;
       }
-      out.custom[k] = cleanText(v, 500);
+      const cv = cleanText(v, Number.MAX_SAFE_INTEGER);
+      if (tooLong("custom_value", cv)) out.errors.push(tooLong("custom_value", cv)!);
+      else out.custom[k] = cv;
+    }
+  }
+  if ("add_field" in p) {
+    // { add_field: { label: "Loan Type!", value: "DSCR" } }: the server makes the key
+    // (letters, numbers, underscores) and keeps the label exactly as typed for display.
+    const f = asObject(p.add_field);
+    const label = typeof f.label === "string" ? f.label.trim() : "";
+    const key = label ? keyFromLabel(label) : null;
+    const value = cleanText(f.value, Number.MAX_SAFE_INTEGER);
+    if (!label) out.errors.push("Give the new field a name.");
+    else if (label.length > CUSTOM_LABEL_MAX) out.errors.push(`Field names can be up to ${CUSTOM_LABEL_MAX} characters.`);
+    else if (/[\u0000-\u001F<>]/.test(label)) out.errors.push("Field names can't contain < > or control characters.");
+    else if (!key || RESERVED_CUSTOM.has(key)) out.errors.push("Field names need to start with a letter.");
+    else if (!value) out.errors.push("Give the new field a value.");
+    else if (tooLong("custom_value", value)) out.errors.push(tooLong("custom_value", value)!);
+    else {
+      out.custom[key] = value;
+      out.customLabels = { ...(out.customLabels ?? {}), [key]: label };
+    }
+  }
+  if ("custom_labels" in p) {
+    for (const [k, v] of Object.entries(asObject(p.custom_labels))) {
+      const label = typeof v === "string" ? v.trim() : "";
+      if (!CUSTOM_KEY.test(k) || RESERVED_CUSTOM.has(k)) out.errors.push(`"${k}" isn't a valid field name. Use letters, numbers or underscores, starting with a letter.`);
+      else if (!label || label.length > CUSTOM_LABEL_MAX || /[\u0000-\u001F<>]/.test(label)) out.errors.push(`Field names can be 1 to ${CUSTOM_LABEL_MAX} characters, without < > or control characters.`);
+      else out.customLabels = { ...(out.customLabels ?? {}), [k]: label };
     }
   }
   if ("note" in p) {
-    const n = cleanText(p.note, 4000);
-    if (n) out.note = n;
+    const n = cleanText(p.note, Number.MAX_SAFE_INTEGER);
+    if (tooLong("note", n)) out.errors.push(tooLong("note", n)!);
+    else if (n) out.note = n;
   }
   return out;
 }
 
 /** Merge a custom-field patch into the stored custom_fields jsonb without touching other keys (e.g. tcpa_consent). */
-export function mergeCustomFields(stored: unknown, patch: Record<string, string | null>): Record<string, unknown> {
+export function mergeCustomFields(
+  stored: unknown,
+  patch: Record<string, string | null>,
+  labels: Record<string, string> = {},
+): Record<string, unknown> {
   const base = { ...asObject(stored) };
   const ns: Record<string, unknown> = { ...asObject(base.crm_fields) };
+  const names: Record<string, unknown> = { ...asObject(base.crm_field_labels) };
   for (const [k, v] of Object.entries(patch)) {
-    if (v === null) delete ns[k];
-    else ns[k] = v;
+    if (v === null) {
+      delete ns[k];
+      delete names[k];
+    } else ns[k] = v;
   }
+  for (const [k, label] of Object.entries(labels)) names[k] = label;
   base.crm_fields = ns;
+  if (Object.keys(names).length > 0 || "crm_field_labels" in base) base.crm_field_labels = names;
   return base;
 }
 
@@ -530,6 +639,20 @@ function firstString(o: Record<string, unknown>, keys: string[]): string | null 
     if (typeof v === "string" && v.trim()) return v;
   }
   return null;
+}
+
+/** Deterministic id for a stored timeline entry, so notes can be deleted without a schema change. */
+export function timelineEntryId(stored: unknown): string {
+  const o = asObject(stored);
+  if (typeof o.id === "string" && o.id) return o.id;
+  const text = JSON.stringify(o, Object.keys(o).sort());
+  let h1 = 0x811c9dc5;
+  let h2 = 0;
+  for (let i = 0; i < text.length; i++) {
+    h1 = Math.imul(h1 ^ text.charCodeAt(i), 16777619);
+    h2 = (Math.imul(31, h2) + text.charCodeAt(i)) | 0;
+  }
+  return `t_${(h1 >>> 0).toString(16)}${(h2 >>> 0).toString(16)}`;
 }
 
 /**
@@ -548,14 +671,38 @@ export function readTimeline(stored: unknown): TimelineEntry[] {
     const rawType = typeof o.type === "string" ? o.type : "system";
     const type = (TIMELINE_TYPES.has(rawType) ? rawType : rawType.includes("note") ? "note" : "system") as TimelineEntry["type"];
     const by = firstString(o, ["by", "user", "author", "actor"]);
-    out.push({ type, at, by, detail });
+    out.push({ id: timelineEntryId(o), type, at, by, detail });
   }
   return out;
 }
 
+const ACTIVITY_LABELS: Record<string, string> = {
+  first_name: "First name",
+  last_name: "Last name",
+  ...Object.fromEntries(CORE_FIELDS.map((f) => [f.key, f.label])),
+  lead_score: "Score",
+  estimated_value: "Estimated value",
+  next_follow_up: "Follow up date",
+  assigned_to: "Owner",
+  lead_source: "Source",
+};
+
+/** "First name set to Mike", "Tags set to hot, dscr", "Phone cleared". Never a raw column name. */
+export function describeChange(key: string, value: unknown): string {
+  const label = ACTIVITY_LABELS[key] ?? key.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  const empty = value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+  if (empty) return `${label} cleared`;
+  let shown: string;
+  if (Array.isArray(value)) shown = value.join(", ");
+  else if (key === "estimated_value" && typeof value === "number") shown = `$${value.toLocaleString("en-US")}`;
+  else if (key === "next_follow_up" && typeof value === "string") shown = value.slice(0, 10);
+  else shown = String(value);
+  return `${label} set to ${shown}`;
+}
+
 /** Timeline entries describing what a patch changes. Pure: caller supplies time + actor. */
 export function historyFor(
-  before: Partial<Record<keyof ColumnPatch, unknown>> & { custom?: Record<string, string> },
+  before: Partial<Record<keyof ColumnPatch, unknown>> & { custom?: Record<string, string>; customLabels?: Record<string, string> },
   patch: SanitizedPatch,
   actor: string | null,
   at: string,
@@ -565,16 +712,20 @@ export function historyFor(
     const prev = before[k as keyof ColumnPatch];
     if (JSON.stringify(prev ?? null) === JSON.stringify(v ?? null)) continue;
     if (k === "stage") {
-      entries.push({ type: "stage_changed", at, by: actor, detail: `Stage: ${String(prev ?? "new")} → ${String(v)}` });
+      const label = (x: unknown) => STAGES.find((st) => st.key === normalizeStage(x))?.label ?? String(x);
+      entries.push({ type: "stage_changed", at, by: actor, detail: `Stage changed from ${label(prev ?? "new")} to ${label(v)}` });
     } else {
-      const label = CORE_FIELDS.find((f) => f.key === k)?.label ?? k;
-      const shown = Array.isArray(v) ? v.join(", ") : (v ?? "");
-      entries.push({ type: "field_changed", at, by: actor, detail: `${label} set to ${String(shown) || "empty"}` });
+      entries.push({ type: "field_changed", at, by: actor, detail: describeChange(k, v) });
     }
   }
   for (const [k, v] of Object.entries(patch.custom)) {
     if ((before.custom?.[k] ?? null) === v) continue;
-    entries.push({ type: "field_changed", at, by: actor, detail: `${customFieldDef(k).label} set to ${v ?? "empty"}` });
+    const label = patch.customLabels?.[k] ?? before.customLabels?.[k] ?? customFieldDef(k).label;
+    entries.push({ type: "field_changed", at, by: actor, detail: v === null ? `${label} removed` : `${label} set to ${v}` });
+  }
+  for (const [k, label] of Object.entries(patch.customLabels ?? {})) {
+    if (k in patch.custom || before.customLabels?.[k] === label) continue;
+    entries.push({ type: "field_changed", at, by: actor, detail: `Field ${before.customLabels?.[k] ?? customFieldDef(k).label} renamed to ${label}` });
   }
   if (patch.note) entries.push({ type: "note", at, by: actor, detail: patch.note });
   return entries;
@@ -594,7 +745,7 @@ export function patchBodyFor(field: Pick<FieldDef, "key">, value: string): Recor
 
 // ── Export ─────────────────────────────────────────────────────────────────
 
-function csvCell(v: string): string {
+export function csvCell(v: string): string {
   const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v; // neutralize spreadsheet formula injection
   return `"${safe.replace(/"/g, '""')}"`;
 }

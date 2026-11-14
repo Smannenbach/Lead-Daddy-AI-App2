@@ -1,3 +1,4 @@
+import { apiError, serverError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth";
 import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -5,6 +6,8 @@ import { sendSms } from "@/lib/channels/twilio";
 import { sendEmail } from "@/lib/channels/email";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
 import type { SequenceState, SequenceStep } from "@/lib/campaigns/sequences";
+import { previewCampaign, readAudience } from "@/lib/campaigns/recipients";
+import { tooLong } from "@/lib/leads/limits";
 
 interface LaunchBody {
   name: string;
@@ -14,6 +17,11 @@ interface LaunchBody {
   brief?: string; // what the campaign is about (used when generateCopy)
   generateCopy?: boolean; // AI-write step bodies via the campaign-writer agent
 }
+
+const LAUNCHABLE = new Set(["draft", "paused", ""]);
+
+/** New campaigns are email only unless the user picks texts or calls on purpose. */
+export const DEFAULT_CHANNELS = ["email"] as const;
 
 // Live schema has no campaign_recipients table; recipients, channel sequence and the
 // sequence-runner state live in marketing_campaign.target_audience (jsonb):
@@ -36,9 +44,9 @@ export async function GET() {
     .eq("organization_id", organizationId())
     .order("created_date", { ascending: false })
     .limit(100);
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("campaigns GET", error.message);
 
-  const campaigns = (data ?? []).map((c) => {
+  const campaigns = (data ?? []).filter((c) => !readAudience(c.target_audience).deletedAt && c.status !== "deleted").map((c) => {
     const ta = (c.target_audience ?? {}) as { leadIds?: string[]; sequence?: SequenceState };
     const seq = ta.sequence ?? { steps: [], launchedAt: null, runs: [] };
     const doneSteps = new Set(
@@ -84,15 +92,21 @@ export async function POST(request: Request) {
   if ("error" in auth) return auth.error;
 
   const body = (await request.json().catch(() => null)) as LaunchBody | null;
-  if (!body?.name?.trim()) return Response.json({ error: "name is required" }, { status: 400 });
+  if (!body?.name?.trim()) return Response.json({ code: "name_required", error: "Give the campaign a name." }, { status: 400 });
+  if (tooLong("campaign_name", body.name.trim())) {
+    return Response.json({ code: "too_long", error: tooLong("campaign_name", body.name.trim()) }, { status: 400 });
+  }
 
   const now = new Date().toISOString();
   const db = createServiceClient();
 
   let steps = body.steps ?? [];
   if (steps.length === 0 && body.generateCopy) {
-    const generated = await generateCampaignSteps(body.name.trim(), body.brief ?? "", asStringArray(body.channelSeq).length > 0 ? asStringArray(body.channelSeq) as ("email" | "sms" | "call")[] : ["email", "sms"]);
-    if ("error" in generated) return Response.json({ error: generated.error }, { status: 502 });
+    const generated = await generateCampaignSteps(body.name.trim(), body.brief ?? "", asStringArray(body.channelSeq).length > 0 ? asStringArray(body.channelSeq) as ("email" | "sms" | "call")[] : [...DEFAULT_CHANNELS]);
+    if ("error" in generated) {
+      console.error("[campaigns] copy generation failed", generated.error);
+      return apiError("copy_failed", "The AI couldn't write the copy just now. Try again, or add the messages yourself.", 502);
+    }
     steps = generated.steps;
   }
 
@@ -104,7 +118,7 @@ export async function POST(request: Request) {
       status: "draft",
       target_audience: {
         leadIds: body.leadIds ?? [],
-        channelSeq: body.channelSeq ?? ["email", "sms"],
+        channelSeq: asStringArray(body.channelSeq).length > 0 ? asStringArray(body.channelSeq) : [...DEFAULT_CHANNELS],
         sequence: { steps, launchedAt: null, runs: [] } satisfies SequenceState,
       },
       created_date: now,
@@ -112,7 +126,7 @@ export async function POST(request: Request) {
     })
     .select("id")
     .single();
-  if (error || !campaign) return Response.json({ error: error?.message ?? "create failed" }, { status: 500 });
+  if (error || !campaign) return serverError("campaigns POST", error?.message ?? "create failed");
 
   return Response.json({ id: campaign.id, status: "draft" }, { status: 201 });
 }
@@ -184,9 +198,9 @@ export async function PATCH(request: Request) {
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
 
-  const body = (await request.json().catch(() => null)) as { campaignId?: string; action?: "launch" } | null;
+  const body = (await request.json().catch(() => null)) as { campaignId?: string; action?: "launch"; acknowledgeSkips?: boolean } | null;
   if (body?.action !== "launch" || !body.campaignId) {
-    return Response.json({ error: "action=launch and campaignId are required" }, { status: 400 });
+    return apiError("invalid_request", "Pick a campaign to launch.", 400);
   }
 
   const db = createServiceClient();
@@ -197,15 +211,24 @@ export async function PATCH(request: Request) {
     .eq("id", body.campaignId)
     .eq("organization_id", orgId)
     .single();
-  if (!campaign) return Response.json({ error: "Campaign not found" }, { status: 404 });
-  if (campaign.status === "live") {
-    return Response.json({ id: campaign.id, status: "live" }); // idempotent relaunch
+  if (!campaign) return apiError("not_found", "Campaign not found.", 404);
+  // Only drafts (or paused campaigns) can launch. Live and Base44 'active' campaigns are
+  // already running; completed and deleted ones are done.
+  const status = (campaign.status ?? "draft").toLowerCase();
+  if (!LAUNCHABLE.has(status)) {
+    const running = status === "live" || status === "active";
+    return apiError(
+      running ? "already_running" : "not_launchable",
+      running ? "This campaign is already running." : "This campaign can't be launched again.",
+      409,
+      { status: campaign.status },
+    );
   }
 
   const audience = (campaign.target_audience ?? {}) as TargetAudience;
   const leadIds = asStringArray(audience.leadIds);
   if (leadIds.length === 0) {
-    return Response.json({ error: "Add recipients before launching" }, { status: 400 });
+    return apiError("no_recipients", "Add recipients before launching.", 400);
   }
 
   const { data: contacts } = await db
@@ -218,7 +241,7 @@ export async function PATCH(request: Request) {
   if (found.length < leadIds.length) {
     const foundIds = new Set(found.map((c) => c.id));
     return Response.json(
-      { error: "Some recipients no longer exist", missingLeadIds: leadIds.filter((id) => !foundIds.has(id)) },
+      { code: "recipients_missing", error: "Some recipients were deleted. Remove them from the campaign and try again.", missingLeadIds: leadIds.filter((id) => !foundIds.has(id)) },
       { status: 409 },
     );
   }
@@ -239,7 +262,22 @@ export async function PATCH(request: Request) {
   }
   if (missing.length > 0) {
     return Response.json(
-      { error: `${missing.length} lead(s) lack a valid ${firstChannel === "email" ? "email" : "phone"} verification; verify before launch`, missingLeadIds: missing },
+      { code: "unverified_recipients", error: `${missing.length} recipient(s) need a verified ${firstChannel === "email" ? "email" : "phone number"} first. Verify them, then launch.`, missingLeadIds: missing },
+      { status: 409 },
+    );
+  }
+
+  // Consent gate: texts and calls never go to a lead without consent. The send step
+  // skips them too; this makes the user see and accept that BEFORE anything goes out.
+  const preview = await previewCampaign(campaign);
+  const consentSkips = preview.skipped.filter((s) => s.channel !== "email");
+  if (consentSkips.length > 0 && body.acknowledgeSkips !== true) {
+    return Response.json(
+      {
+        code: "recipients_will_be_skipped",
+        error: `${new Set(consentSkips.map((s) => s.leadId)).size} recipient(s) can't get texts or calls. Review who will be skipped, then launch again to confirm.`,
+        preview,
+      },
       { status: 409 },
     );
   }
@@ -265,32 +303,49 @@ export async function PATCH(request: Request) {
     firstChannel,
   });
 
-  return Response.json({ id: campaign.id, status: "live", recipients: leadIds.length });
+  return Response.json({ id: campaign.id, name: campaign.name, status: "live", recipients: leadIds.length, message: `${campaign.name ?? "Campaign"} launched to ${leadIds.length} recipient(s).` });
 }
 
-// Direct channel sends (used by the console + future sequence runner)
+// Direct one-off send to ONE existing lead. The address always comes from the lead
+// record (never from the request), texts need consent on file, and opted-out leads
+// are refused. Used by the console; there is no free-form "send to any number" path.
 export async function PUT(request: Request) {
   const auth = await requireUser();
   if ("error" in auth) return auth.error;
 
   const body = (await request.json().catch(() => null)) as
-    | { channel?: "sms" | "email"; to?: string; text?: string; subject?: string; leadId?: string }
+    | { channel?: "sms" | "email"; text?: string; subject?: string; leadId?: string }
     | null;
-  if (!body?.channel || !body.to) return Response.json({ error: "channel and to are required" }, { status: 400 });
+  if ((body?.channel !== "sms" && body?.channel !== "email") || !body.leadId || !body.text?.trim()) {
+    return Response.json({ code: "invalid_request", error: "Pick a lead, a channel and a message." }, { status: 400 });
+  }
+
+  const { data: lead } = await createServiceClient()
+    .from("crm_contact")
+    .select("id, email, phone, custom_fields")
+    .eq("id", body.leadId)
+    .eq("organization_id", organizationId())
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!lead) return Response.json({ code: "not_found", error: "That lead no longer exists." }, { status: 404 });
+
+  const cf = (lead.custom_fields ?? {}) as Record<string, unknown>;
+  const to = body.channel === "sms" ? lead.phone : lead.email;
+  if (!to) return Response.json({ code: "missing_contact", error: `This lead has no ${body.channel === "sms" ? "phone number" : "email"}.` }, { status: 400 });
+  if (body.channel === "sms" && cf.tcpa_consent !== "granted") {
+    return Response.json({ code: "no_consent", error: "This lead hasn't given consent for texts." }, { status: 403 });
+  }
 
   try {
-    if (body.channel === "sms") {
-      await sendSms(body.to, body.text ?? "");
-    } else {
-      await sendEmail({ to: body.to, subject: body.subject ?? "LeadDaddy.ai", html: body.text ?? "" });
-    }
-    await logCampaignEvent("channel_send", `[${body.channel}] to ${body.to}: ${(body.text ?? "").slice(0, 500)}`, {
+    if (body.channel === "sms") await sendSms(to, body.text);
+    else await sendEmail({ to, subject: body.subject ?? "A note from Lead Daddy", html: body.text });
+    await logCampaignEvent("channel_send", `[${body.channel}] to lead ${lead.id}: ${body.text.slice(0, 500)}`, {
       channel: body.channel,
-      to: body.to,
-      leadId: body.leadId ?? null,
+      leadId: lead.id,
     });
     return Response.json({ ok: true });
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "send failed" }, { status: 502 });
+    console.error("[campaigns PUT] send failed", err instanceof Error ? err.message : err);
+    return Response.json({ code: "send_failed", error: "That message didn't send. Try again in a minute." }, { status: 502 });
   }
 }

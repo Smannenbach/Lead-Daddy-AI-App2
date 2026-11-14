@@ -2,6 +2,7 @@
 // or manually with the same header. The per-step consent/verification gates in
 // /api/campaigns/[id]/advance do the real compliance work.
 
+import { apiError } from "@/lib/api/errors";
 import { createServiceClient } from "@/lib/supabase/server";
 import { organizationId } from "@/lib/supabase/org";
 
@@ -11,7 +12,7 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const auth = request.headers.get("authorization");
   if (!secret || auth !== `Bearer ${secret}`) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return apiError("unauthorized", "Unauthorized.", 401);
   }
 
   const db = createServiceClient();

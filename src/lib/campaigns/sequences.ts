@@ -68,3 +68,45 @@ export function skipReason(opts: {
 export function emptySequenceState(): SequenceState {
   return { steps: [], launchedAt: null, runs: [] };
 }
+
+// ── Pre-launch preview: who would be skipped, and why ──────────────────────
+
+export const SKIP_REASON_TEXT: Record<Exclude<StepRun["status"], "sent" | "failed">, (c: Channel) => string> = {
+  skipped_no_consent: () => "No consent on file for texts or calls",
+  skipped_unverified: (c) => (c === "email" ? "Email not verified as valid" : "Phone not verified as valid"),
+};
+
+export interface PreviewContact {
+  id: string;
+  name: string;
+  tcpaConsent: boolean;
+  emailStatus: string | null;
+  phoneStatus: string | null;
+}
+
+export interface PreviewSkip {
+  leadId: string;
+  name: string;
+  channel: Channel;
+  reason: string;
+}
+
+/** Channels a campaign will use: its steps if written, otherwise its planned channel order. */
+export function campaignChannels(steps: SequenceStep[], channelSeq: string[]): Channel[] {
+  const raw = steps.length > 0 ? steps.map((s) => s.channel) : channelSeq;
+  return [...new Set(raw.filter((c): c is Channel => c === "email" || c === "sms" || c === "call"))];
+}
+
+/** Uses the same skipReason the send step uses, so the preview can't disagree with a real send. */
+export function previewSkips(channels: Channel[], contacts: PreviewContact[]): { willReach: number; skipped: PreviewSkip[] } {
+  const skipped: PreviewSkip[] = [];
+  const reached = new Set<string>();
+  for (const c of contacts) {
+    for (const channel of channels) {
+      const s = skipReason({ channel, tcpaConsent: c.tcpaConsent, emailStatus: c.emailStatus, phoneStatus: c.phoneStatus });
+      if (s === null || s === "sent" || s === "failed") reached.add(c.id);
+      else skipped.push({ leadId: c.id, name: c.name, channel, reason: SKIP_REASON_TEXT[s](channel) });
+    }
+  }
+  return { willReach: reached.size, skipped };
+}

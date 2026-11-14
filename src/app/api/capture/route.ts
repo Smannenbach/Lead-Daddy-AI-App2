@@ -2,10 +2,21 @@
 // guarded by honeypot + shape validation + idempotent upsert into unified_lead,
 // mirrored to crm_contact for the outreach pipeline.
 
-import { validateCapture, captureIdempotencyKey } from "@/lib/capture/validate";
+import { apiError } from "@/lib/api/errors";
+import { validateCapture, captureIdempotencyKey, captureResponse } from "@/lib/capture/validate";
 import { organizationId } from "@/lib/supabase/org";
+import { consentRecord } from "@/lib/consent";
 import { createServiceClient } from "@/lib/supabase/server";
 import { checkRate, clientKey } from "@/lib/ratelimit";
+
+const CAPTURE_MESSAGES: Record<string, string> = {
+  missing_contact: "Add your email and phone number.",
+  missing_email: "Add your email address.",
+  missing_phone: "Add your phone number.",
+  bad_email: "Check your email address.",
+  bad_phone: "Check your phone number.",
+  too_long: "One of your answers is too long. Shorten it and try again.",
+};
 
 const CAPTURE_LIMIT = 10; // submissions per IP per window
 const CAPTURE_WINDOW_MS = 10 * 60 * 1000;
@@ -14,19 +25,19 @@ export async function POST(request: Request) {
   const rate = checkRate(`capture:${clientKey(request)}`, Date.now(), CAPTURE_LIMIT, CAPTURE_WINDOW_MS);
   if (!rate.allowed) {
     return Response.json(
-      { error: "too_many_requests" },
+      { code: "too_many_requests", error: "Too many tries. Wait a few minutes and try again." },
       { status: 429, headers: { "Retry-After": String(rate.retryAfterSeconds) } },
     );
   }
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body) return Response.json({ error: "invalid" }, { status: 400 });
+  if (!body) return apiError("invalid_request", "Something was wrong with that form. Try again.", 400);
 
   const v = validateCapture(body);
   if (!v.ok) {
     // Honeypots get a polite fake-success so bots learn nothing.
     if (v.error === "honeypot") return Response.json({ ok: true }, { status: 200 });
-    return Response.json({ error: v.error }, { status: 400 });
+    return apiError(v.error, CAPTURE_MESSAGES[v.error] ?? "Check the form and try again.", 400);
   }
   const p = v.value;
   const key = captureIdempotencyKey(p.email, p.phone);
@@ -42,7 +53,10 @@ export async function POST(request: Request) {
     .eq("organization_id", org)
     .eq("idempotency_key", key)
     .maybeSingle();
-  if (existing) return Response.json({ ok: true, id: existing.id, duplicate: true });
+  if (existing) {
+    await mirrorToCrm(db, org, p, existing.id, pageUrl, now);
+    return Response.json(captureResponse(existing.id, p.consent, true));
+  }
 
   const { data: lead, error } = await db
     .from("unified_lead")
@@ -64,35 +78,111 @@ export async function POST(request: Request) {
     })
     .select("id")
     .single();
-  if (error || !lead) return Response.json({ error: error?.message ?? "capture failed" }, { status: 500 });
-
-  // Mirror into the CRM so the lead is visible in the console pipeline immediately
-  // (skip if a contact with this email already exists).
-  if (p.email) {
-    const { data: dup } = await db
-      .from("crm_contact")
-      .select("id")
-      .eq("organization_id", org)
-      .eq("email", p.email)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (!dup) {
-      const nameParts = p.name.split(/\s+/);
-      await db.from("crm_contact").insert({
-        organization_id: org,
-        first_name: nameParts[0] ?? p.name,
-        last_name: nameParts.slice(1).join(" ") || null,
-        email: p.email,
-        phone: p.phone,
-        company: p.company,
-        custom_fields: { tcpa_consent: p.consent ? "granted" : "none", unified_lead_id: lead.id },
-        lead_source: "bfcm-landing",
-        stage: "new",
-        created_date: now,
-        updated_date: now,
-      });
-    }
+  if (error || !lead) {
+    console.error("[capture] unified_lead insert failed", error?.message);
+    return Response.json({ code: "server_error", error: "We couldn't save that. Try again in a minute." }, { status: 500 });
   }
 
-  return Response.json({ ok: true, id: lead.id }, { status: 201 });
+  // Mirror into the CRM so the lead is visible in the console pipeline immediately.
+  // Phone-only submissions are mirrored too (they used to be dropped). An existing
+  // contact with the same email (or phone, when there's no email) gets the
+  // submission added to its Activity instead of a duplicate lead.
+  await mirrorToCrm(db, org, p, lead.id, pageUrl, now);
+
+  return Response.json(captureResponse(lead.id, p.consent), { status: 201 });
 }
+
+type Db = ReturnType<typeof createServiceClient>;
+
+async function mirrorToCrm(
+  db: Db,
+  org: string,
+  p: import("@/lib/capture/validate").CapturePayload,
+  unifiedLeadId: string,
+  pageUrl: string | null,
+  now: string,
+): Promise<void> {
+  const activity = {
+    type: "system",
+    at: now,
+    by: "Lead capture form",
+    detail: [
+      `Submitted the lead form${pageUrl ? ` (${pathOf(pageUrl)})` : ""}.`,
+      p.consent ? "Consent box checked." : "Consent box not checked.",
+      p.message ? `Looking to finance: ${p.message}` : "",
+    ].filter(Boolean).join(" "),
+  };
+  const finance = p.message ? { financing_need: p.message } : {};
+  // Shown on the lead as the question the person answered.
+  const financeLabel = p.message ? { financing_need: "What are you looking to finance?" } : {};
+
+  const { data: existing } = await db
+    .from("crm_contact")
+    .select("id, custom_fields, engagement_history")
+    .eq("organization_id", org)
+    .is("deleted_at", null)
+    .eq("email", p.email ?? "")
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    const cf = (existing.custom_fields ?? {}) as Record<string, unknown>;
+    const crmFields = (cf.crm_fields ?? {}) as Record<string, unknown>;
+    const history = Array.isArray(existing.engagement_history) ? existing.engagement_history : [];
+    // A repeat submit can ADD consent (box checked now), but an unchecked box never
+    // removes consent given earlier. Revoking happens only through STOP or a person.
+    const grant =
+      p.consent && cf.tcpa_consent !== "granted"
+        ? {
+            tcpa_consent: "granted",
+            consent_record: consentRecord({ granted: true, method: "web_form", source: pageUrl ?? "web form", wordingVersion: "bfcm-form-2026-11", at: now }),
+          }
+        : {};
+    const { error } = await db
+      .from("crm_contact")
+      .update({
+        custom_fields: {
+          ...cf,
+          ...grant,
+          crm_fields: { ...crmFields, ...finance },
+          crm_field_labels: { ...((cf.crm_field_labels ?? {}) as Record<string, unknown>), ...financeLabel },
+        },
+        engagement_history: [...history, activity].slice(-200),
+      })
+      .eq("id", existing.id);
+    if (error) console.error("[capture] crm update failed", error.message);
+    return;
+  }
+
+  const nameParts = p.name.split(/\s+/);
+  const { error } = await db.from("crm_contact").insert({
+    organization_id: org,
+    first_name: nameParts[0] ?? p.name,
+    last_name: nameParts.slice(1).join(" ") || null,
+    email: p.email,
+    phone: p.phone,
+    company: p.company,
+    custom_fields: {
+      tcpa_consent: p.consent ? "granted" : "none",
+      consent_record: consentRecord({ granted: p.consent, method: "web_form", source: pageUrl ?? "web form", wordingVersion: "bfcm-form-2026-11", at: now }),
+      unified_lead_id: unifiedLeadId,
+      crm_fields: finance,
+      crm_field_labels: financeLabel,
+    },
+    engagement_history: [activity],
+    lead_source: "bfcm-landing",
+    stage: "new",
+    created_date: now,
+    updated_date: now,
+  });
+  if (error) console.error("[capture] crm insert failed", error.message);
+}
+
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url.slice(0, 80);
+  }
+}
+
