@@ -4,6 +4,7 @@ import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendSms } from "@/lib/channels/twilio";
 import { sendEmail } from "@/lib/channels/email";
+import { SendsDisabledError } from "@/lib/channels/send-guard";
 import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
 import type { SequenceState, SequenceStep } from "@/lib/campaigns/sequences";
 import { previewCampaign, readAudience } from "@/lib/campaigns/recipients";
@@ -345,6 +346,9 @@ export async function PUT(request: Request) {
     });
     return Response.json({ ok: true });
   } catch (err) {
+    if (err instanceof SendsDisabledError) {
+      return Response.json({ code: "sends_disabled", error: "Sending is turned off in this preview. Nothing was sent." }, { status: 503 });
+    }
     console.error("[campaigns PUT] send failed", err instanceof Error ? err.message : err);
     return Response.json({ code: "send_failed", error: "That message didn't send. Try again in a minute." }, { status: 502 });
   }

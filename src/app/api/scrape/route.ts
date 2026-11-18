@@ -9,6 +9,7 @@ import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyContactPoints } from "@/lib/verify/contact-points";
 import { logVerification } from "@/lib/verify/activity";
+import { sendsDisabledReason } from "@/lib/channels/send-guard";
 
 interface ScrapeRequest {
   url: string;
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
             const { data, error } = await db.from("crm_contact").insert(row).select("id").single();
             if (error || !data) continue;
             createdLeadIds.push(data.id);
-            if (body.autoVerify) {
+            if (body.autoVerify && !sendsDisabledReason()) {
               const targets = [
                 row.email ? { kind: "email" as const, value: row.email } : null,
                 row.phone ? { kind: "phone" as const, value: row.phone } : null,

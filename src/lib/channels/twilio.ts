@@ -1,4 +1,5 @@
 // Twilio: SMS send + outbound voice call with AI answer webhook.
+import { assertSendsAllowed } from "@/lib/channels/send-guard";
 
 const TWILIO_BASE = "https://api.twilio.com/2010-04-01";
 
@@ -55,11 +56,13 @@ async function twilioPost(path: string, params: Record<string, string>): Promise
 }
 
 export async function sendSms(to: string, body: string): Promise<Record<string, unknown>> {
+  assertSendsAllowed("Texting");
   return twilioPost("Messages.json", { To: to, From: fromNumber(), Body: body });
 }
 
 /** Outbound call: Twilio answers and fetches TwiML from our /api/channels/voice webhook. */
 export async function startCall(to: string, context?: string): Promise<Record<string, unknown>> {
+  assertSendsAllowed("Calling");
   const base = process.env.APP_BASE_URL; // e.g. https://leaddaddy-ai.vercel.app
   if (!base) throw new Error("APP_BASE_URL not configured (needed for voice webhook)");
   return twilioPost("Calls.json", {
