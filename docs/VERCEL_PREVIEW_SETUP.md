@@ -39,6 +39,24 @@ Production deployments behave normally.
 5. Work on a branch, push, and Vercel posts a preview link on the pull request. Each push
    gets a fresh link.
 
+## Demo mode (no Supabase needed)
+
+Set `NEXT_PUBLIC_LEAD_DADDY_DEMO_MODE=true` on the Vercel project and redeploy. The app then:
+
+- runs on 12 built-in sample leads (fictional people, example.com emails, 555 numbers),
+  two draft campaigns, consent records and Activity history (`src/lib/demo/seed.ts`);
+- signs anyone in as `demo@leaddaddy.example` (keep Vercel Authentication on so only
+  your team can open the link);
+- never sends or verifies, whatever other keys are set;
+- shows a "Demo Mode" banner on every page;
+- writes AI-free sample copy when you create a campaign without AI keys.
+
+Changes are kept in server memory, so they reset when Vercel starts a new server
+(after a deploy, or after a while idle). To switch to a real database, add the Supabase
+keys and remove `NEXT_PUBLIC_LEAD_DADDY_DEMO_MODE`, then redeploy.
+
+**Never set it on the live app.** Only the exact value `true` turns it on.
+
 ## Which database?
 
 - **Live data (Steve's Supabase keys):** the preview reads and changes the real leads.

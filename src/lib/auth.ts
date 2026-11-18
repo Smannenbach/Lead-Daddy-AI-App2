@@ -3,6 +3,7 @@
 
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_USER, isDemoMode } from "@/lib/demo/mode";
 
 export const DEFAULT_ALLOWED_EMAILS = "steve@loandaddy.ai,mykoal@loandaddy.ai";
 
@@ -22,6 +23,8 @@ type AuthResult = { user: User } | { error: Response };
 
 /** Signed-in user on the allowlist, or a ready-to-return 401/403 response. */
 export async function requireUser(): Promise<AuthResult> {
+  // Demo mode: sample data only, so the built-in demo user is always allowed in.
+  if (isDemoMode()) return { user: { ...DEMO_USER } as unknown as User };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: Response.json({ code: "unauthorized", error: "Your session has expired. Sign in again." }, { status: 401 }) };

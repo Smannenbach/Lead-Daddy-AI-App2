@@ -9,6 +9,7 @@ import { latestStatusByEmail, latestStatusByPhone } from "@/lib/verify/status";
 import type { SequenceState, SequenceStep } from "@/lib/campaigns/sequences";
 import { previewCampaign, readAudience } from "@/lib/campaigns/recipients";
 import { tooLong } from "@/lib/leads/limits";
+import { isDemoMode } from "@/lib/demo/mode";
 
 interface LaunchBody {
   name: string;
@@ -104,11 +105,25 @@ export async function POST(request: Request) {
   let steps = body.steps ?? [];
   if (steps.length === 0 && body.generateCopy) {
     const generated = await generateCampaignSteps(body.name.trim(), body.brief ?? "", asStringArray(body.channelSeq).length > 0 ? asStringArray(body.channelSeq) as ("email" | "sms" | "call")[] : [...DEFAULT_CHANNELS]);
-    if ("error" in generated) {
+    if ("error" in generated && isDemoMode()) {
+      // Demo mode usually has no AI keys: use clearly labeled sample copy instead.
+      const { buildSteps } = await import("@/lib/campaigns/sequences");
+      const channels = (asStringArray(body.channelSeq).length > 0 ? asStringArray(body.channelSeq) : [...DEFAULT_CHANNELS]) as ("email" | "sms" | "call")[];
+      steps = buildSteps({
+        channelSeq: channels,
+        bodies: {
+          email: "[Demo copy] Hi {first_name}, quick note about your property. Reply to opt out.",
+          sms: "[Demo copy] Quick follow up from Lead Daddy. Reply STOP to opt out.",
+          call: "[Demo copy] Hi, this is a quick follow up call about your property.",
+        },
+        subjects: { email: `[Demo] ${body.name.trim()}` },
+      });
+    } else if ("error" in generated) {
       console.error("[campaigns] copy generation failed", generated.error);
       return apiError("copy_failed", "The AI couldn't write the copy just now. Try again, or add the messages yourself.", 502);
+    } else {
+      steps = generated.steps;
     }
-    steps = generated.steps;
   }
 
   const { data: campaign, error } = await db
@@ -347,7 +362,7 @@ export async function PUT(request: Request) {
     return Response.json({ ok: true });
   } catch (err) {
     if (err instanceof SendsDisabledError) {
-      return Response.json({ code: "sends_disabled", error: "Sending is turned off in this preview. Nothing was sent." }, { status: 503 });
+      return Response.json({ code: "sends_disabled", error: "Sending is turned off on this version of the app. Nothing was sent." }, { status: 503 });
     }
     console.error("[campaigns PUT] send failed", err instanceof Error ? err.message : err);
     return Response.json({ code: "send_failed", error: "That message didn't send. Try again in a minute." }, { status: 502 });

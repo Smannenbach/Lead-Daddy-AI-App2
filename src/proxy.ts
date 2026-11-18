@@ -1,10 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isDemoMode } from "@/lib/demo/mode";
 
 /** Signed-in app pages (sidebar). Each must also be in config.matcher below. */
 export const APP_PAGES = ["/crm", "/pipeline", "/campaigns", "/import", "/scraper", "/settings"];
 
 export async function proxy(request: NextRequest) {
+  // Demo mode (sample data, no Supabase): nothing to protect, every page opens.
+  if (isDemoMode()) return NextResponse.next({ request });
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

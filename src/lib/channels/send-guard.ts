@@ -9,11 +9,12 @@
 export class SendsDisabledError extends Error {
   readonly code = "sends_disabled";
   constructor(what: string) {
-    super(`${what} is turned off in this preview. Nothing was sent or charged.`);
+    super(`${what} is turned off on this version of the app. Nothing was sent or charged.`);
   }
 }
 
 export function sendsDisabledReason(env: Record<string, string | undefined> = process.env): string | null {
+  if (env.NEXT_PUBLIC_LEAD_DADDY_DEMO_MODE === "true") return "demo mode";
   if (env.LEAD_DADDY_DISABLE_SENDS === "true") return "LEAD_DADDY_DISABLE_SENDS=true";
   if (env.VERCEL_ENV === "preview" && env.LEAD_DADDY_ALLOW_PREVIEW_SENDS !== "true") return "Vercel preview deployment";
   return null;

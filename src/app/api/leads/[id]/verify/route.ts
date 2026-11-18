@@ -56,7 +56,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   // Paid checks are off on previews (see src/lib/channels/send-guard.ts).
   const blocked = sendsDisabledReason();
   if (blocked) {
-    return Response.json({ code: "sends_disabled", error: "Verification is turned off in this preview. No credits were used." }, { status: 503 });
+    return Response.json({ code: "sends_disabled", error: "Verification is turned off on this version of the app. No credits were used." }, { status: 503 });
   }
   const results: VerifyResult[] = await verifyContactPoints(targets);
   await logVerification(contactId, results, auth.user.email ?? null);
