@@ -2,6 +2,7 @@
 // (domain-authenticated loandaddy.ai), Resend as fallback. Callers just use sendEmail.
 
 import { sendEmail as sendViaResend } from "./resend";
+import { assertSendsAllowed } from "@/lib/channels/send-guard";
 
 interface EmailOpts {
   to: string;
@@ -29,6 +30,7 @@ async function sendViaSendGrid(opts: EmailOpts): Promise<{ id: string }> {
 }
 
 export async function sendEmail(opts: EmailOpts): Promise<{ id: string; provider: "sendgrid" | "resend" }> {
+  assertSendsAllowed("Email");
   if (process.env.SENDGRID_API_KEY) {
     const r = await sendViaSendGrid(opts);
     return { ...r, provider: "sendgrid" };

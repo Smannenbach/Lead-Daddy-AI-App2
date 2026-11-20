@@ -4,6 +4,7 @@ import { organizationId } from "@/lib/supabase/org";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyContactPoints, type VerifyResult } from "@/lib/verify/contact-points";
 import { logVerification } from "@/lib/verify/activity";
+import { sendsDisabledReason } from "@/lib/channels/send-guard";
 import { creditsPerCheck, getReoonBalance } from "@/lib/verify/reoon";
 
 // Frozen contract: -> { contactId, results: [{ kind, value, provider, result }] }
@@ -52,6 +53,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     });
   }
 
+  // Paid checks are off on previews (see src/lib/channels/send-guard.ts).
+  const blocked = sendsDisabledReason();
+  if (blocked) {
+    return Response.json({ code: "sends_disabled", error: "Verification is turned off on this version of the app. No credits were used." }, { status: 503 });
+  }
   const results: VerifyResult[] = await verifyContactPoints(targets);
   await logVerification(contactId, results, auth.user.email ?? null);
 

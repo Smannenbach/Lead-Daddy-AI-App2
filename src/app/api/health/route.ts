@@ -2,6 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { enabledProviders } from "@/lib/ai/providers";
+import { isDemoMode } from "@/lib/demo/mode";
 
 export async function GET() {
   let db = "down";
@@ -12,9 +13,10 @@ export async function GET() {
     db = "down";
   }
   const providers = enabledProviders().map((p) => p.key);
-  const ok = db === "up" && providers.length > 0;
+  const demo = isDemoMode();
+  const ok = db === "up" && (providers.length > 0 || demo);
   return Response.json(
-    { ok, db, providers, time: new Date().toISOString() },
+    { ok, db, providers, ...(demo ? { demo: true } : {}), time: new Date().toISOString() },
     { status: ok ? 200 : 503 },
   );
 }

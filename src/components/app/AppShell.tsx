@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Download, Home, KanbanSquare, LogOut, Megaphone, ScanSearch, Settings, Users, type LucideIcon } from "lucide-react";
+import { Download, FlaskConical, Home, KanbanSquare, LogOut, Megaphone, ScanSearch, Settings, Users, type LucideIcon } from "lucide-react";
+import { isDemoMode } from "@/lib/demo/mode";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, LogoMark } from "@/components/brand/Brand";
 import { Button } from "@/components/ui/button";
@@ -163,6 +164,12 @@ export default function AppShell({ children, defaultOpen = true }: { children: R
             Sign Out
           </Button>
         </header>
+        {isDemoMode() && (
+          <div role="note" className="flex items-center gap-2 border-b border-amber-200 bg-amber-100 px-3 py-2 text-caption text-amber-900 sm:px-6">
+            <FlaskConical aria-hidden className="size-4 shrink-0 text-amber-500" />
+            <span><span className="font-semibold">Demo Mode.</span> Sample data only. Changes reset when the server restarts, and nothing is sent.</span>
+          </div>
+        )}
         <div id="main" tabIndex={-1} className="outline-none">{children}</div>
       </SidebarInset>
       <Toaster position="bottom-right" richColors={false} closeButton />

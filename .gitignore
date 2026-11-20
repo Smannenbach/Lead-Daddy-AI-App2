@@ -30,3 +30,5 @@ Thumbs.db
 
 .vercel
 .env*
+# ...but the key template (names only, no values) is committed
+!.env.example
