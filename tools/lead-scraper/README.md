@@ -22,8 +22,8 @@ Then open `.env` and add your keys.
 
 | Key | Where to get it | Used for |
 |---|---|---|
-| `OUTSCRAPER_API_KEY` | app.outscraper.com, Profile, API Token | Google Maps search (default provider) |
-| `APIFY_API_TOKEN` | console.apify.com, Settings, Integrations | Google Maps search, if you set `maps_provider: apify` |
+| `APIFY_API_TOKEN` | console.apify.com, Settings, API and Integrations | Google Maps search (default provider) |
+| `OUTSCRAPER_API_KEY` | app.outscraper.com, Profile, API Token | Google Maps search, if you set `maps_provider: outscraper` |
 | `MILLIONVERIFIER_API_KEY` | app.millionverifier.com, API | Email verification |
 | `ANTHROPIC_API_KEY` | platform.claude.com, API Keys | Personalized first lines |
 

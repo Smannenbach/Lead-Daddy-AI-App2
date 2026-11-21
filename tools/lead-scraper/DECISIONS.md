@@ -6,6 +6,7 @@ Calls made while building the lead pipeline without stopping to ask. Review the 
 - Built in `tools/lead-scraper/` inside the app2 repo, as its own Python project. It shares nothing with the Next.js app. `.vercelignore` keeps it out of Vercel deploys.
 
 ## Money
+- Default Maps provider is Apify (switched from Outscraper, whose key was rejected).
 - **Review: provider prices are estimates.** `config.yaml` uses Outscraper $0.003 per place, Apify $0.004 per place and MillionVerifier $0.0006 per email. Your real rate depends on your plan and volume (MillionVerifier's per email price is much higher on small credit packs). Update `pricing:` to match your invoices so caps and cost per lead are accurate.
 - Claude prices are Anthropic's published rates for Claude Haiku 5.5 at prompts of 100K tokens or less: $0.10 input, $0.50 output, $0.125 cache write, $0.01 cache read per million tokens. Batches bill at half that.
 - The find phase charges for the places a search returns. The cap check assumes the worst case (a full page of results) before each search.

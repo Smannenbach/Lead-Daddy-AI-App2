@@ -25,7 +25,7 @@ locations:
 max_results_per_search: 20
 
 # Google Maps provider: "outscraper" or "apify".
-maps_provider: outscraper
+maps_provider: apify
 
 # Daily spend caps in US dollars, per phase. A phase stops when it would go over.
 daily_caps_usd:
