@@ -43,8 +43,15 @@ leads personalize                  # Phase 5: write first lines
 leads export --niche "family law"  # Phase 6: CSV for Instantly (add --format smartlead)
 leads run-all                      # everything in order
 leads stats                        # counts and spend
+leads estimate                     # the most the next run could cost; spends nothing
 leads suppress jane@firm.com --reason "unsubscribed"
+leads suppress-import unsubscribes.csv --reason "unsubscribed"
+leads import-businesses firms.csv --niche "family law attorney"
 ```
+
+**No Maps key yet?** Load businesses from any CSV with `leads import-businesses`. It needs a name column and a website column (common header names like Firm Name, Company, URL or Site all work), plus a niche column or `--niche`. City, state, zip and phone are picked up when present. Imports go through the same duplicate check as Maps results. Then run `leads emails` and the rest as usual.
+
+**Unsubscribes and bounces:** export them from Instantly or Smartlead and run `leads suppress-import <file>`. It pulls every email address in the file, whatever the column is called.
 
 Useful options:
 - `leads find --niche "CPA" --city Phoenix --max-results 5` for a small test.

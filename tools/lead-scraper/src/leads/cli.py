@@ -173,6 +173,59 @@ def suppress(
     typer.echo(f"Suppressed {email.strip().lower()}")
 
 
+@app.command("import-businesses")
+def import_businesses_cmd(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, help="CSV with name and website columns."),
+    niche: Optional[str] = typer.Option(None, "--niche", help="Niche for every row, if the file has no niche column."),
+    config: Optional[Path] = ConfigOpt,
+    db: Optional[Path] = DbOpt,
+) -> None:
+    """Add businesses from a CSV instead of a Maps search. Free."""
+    from leads.imports import import_businesses
+
+    cfg, conn = _setup(config, db)
+    try:
+        r = import_businesses(conn, file, niche)
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(2)
+    typer.echo(f"Rows: {r.rows}  Saved: {r.saved}  Duplicates: {r.duplicates}  No website: {r.no_website}  Skipped: {r.skipped}")
+
+
+@app.command("suppress-import")
+def suppress_import(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, help="Unsubscribe or bounce export (CSV or text)."),
+    reason: str = typer.Option("imported", "--reason"),
+    config: Optional[Path] = ConfigOpt,
+    db: Optional[Path] = DbOpt,
+) -> None:
+    """Add every email in a file to the suppression list (Instantly or Smartlead exports work as is)."""
+    from leads.export import add_suppression
+    from leads.imports import emails_in_file
+
+    cfg, conn = _setup(config, db)
+    emails = emails_in_file(file)
+    for e in emails:
+        add_suppression(conn, e, reason)
+    typer.echo(f"Suppressed {len(emails)} emails from {file.name}")
+
+
+@app.command("estimate")
+def estimate_cmd(config: Optional[Path] = ConfigOpt, db: Optional[Path] = DbOpt) -> None:
+    """Show the most the next run could cost, phase by phase. Spends nothing."""
+    from leads.estimate import estimate
+
+    cfg, conn = _setup(config, db)
+    total = 0.0
+    for e in estimate(conn, cfg):
+        total += e.max_usd
+        cap = "no cap" if e.cap is None else f"cap ${e.cap:.2f}, ${e.spent_today:.4f} spent today"
+        flag = "  (would hit the cap and stop early)" if e.over_cap else ""
+        typer.echo(f"{e.phase:<12} {e.units:>6} {e.unit:<7} up to ${e.max_usd:.4f}  ({cap}){flag}")
+    typer.echo(f"{'Total':<12} {'':>6} {'':<7} up to ${total:.4f}")
+    typer.echo("Verify and personalize only count what's already waiting. New emails from a crawl add to them.")
+
+
 def _print_stats(cfg: Config, conn) -> None:
     from leads.export import stats
 

@@ -95,6 +95,20 @@ def clean_email(raw: str) -> str | None:
     return email
 
 
+def decode_cfemail(encoded: str) -> str | None:
+    """Decode Cloudflare's protected email: first byte is the key, the rest XOR with it."""
+    try:
+        data = bytes.fromhex(encoded)
+    except ValueError:
+        return None
+    if len(data) < 2:
+        return None
+    try:
+        return bytes(b ^ data[0] for b in data[1:]).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def extract_emails(html_text: str) -> list[FoundEmail]:
     """Emails from mailto links, visible text and simple obfuscations, deduped in that order."""
     tree = HTMLParser(html_text)
@@ -110,6 +124,15 @@ def extract_emails(html_text: str) -> list[FoundEmail]:
         if href.lower().startswith("mailto:"):
             for part in href[7:].split(","):
                 add(part, "mailto")
+    # Cloudflare email protection: the address is XOR-encoded in a link or data attribute.
+    for node in tree.css("[data-cfemail]"):
+        decoded = decode_cfemail(node.attributes.get("data-cfemail") or "")
+        if decoded:
+            add(decoded, "cloudflare")
+    for m in re.finditer(r"/cdn-cgi/l/email-protection#([0-9a-fA-F]+)", html_text):
+        decoded = decode_cfemail(m.group(1))
+        if decoded:
+            add(decoded, "cloudflare")
     text = page_text(tree, keep_all=True)
     for m in EMAIL_RE.finditer(text):
         add(m.group(0), "page_text")

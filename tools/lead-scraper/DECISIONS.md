@@ -27,6 +27,7 @@ Calls made while building the lead pipeline without stopping to ask. Review the 
 - The 1 to 3 second delay is between requests to the same site. Ten sites run at once.
 - Page text is saved in a `pages` table so Phase 5 reuses it instead of fetching sites twice.
 - Emails on another company's domain (web designers, bar associations) are always dropped. Free webmail is used only when the site has no address on its own domain, and is marked `:webmail` in `email_source`.
+- Cloudflare "email protection" addresses (`data-cfemail` and `/cdn-cgi/l/email-protection#...` links) are decoded. Many small business sites use it, and without decoding those sites look like they have no email. They're marked `cloudflare` in `email_source`.
 - Some role addresses are never kept: noreply, careers, jobs, hr, billing, accounting, privacy, webmaster, postmaster, abuse, press and similar.
 - Ranking: an address matching a person found on the site scores 3, any other personal looking address 2, a role address like info@ or office@ 1. Top two per business are kept.
 - Names and titles come from simple patterns on the page ("Jane Smith" then "Managing Partner", or "Robert Lee, Associate Attorney"). It misses some layouts. Contacts without a name export with blank first and last names.
@@ -48,7 +49,12 @@ Calls made while building the lead pipeline without stopping to ask. Review the 
 - File names: `<niche>_<format>_<YYYYMMDD>.csv` in `data/exports/`.
 - `--niche` matches as a substring, so "family law" matches "family law attorney".
 
+## Extras beyond the brief
+- `leads import-businesses` loads businesses from a CSV so the pipeline runs without a Maps key. Source is stored as `csv:<file name>`.
+- `leads suppress-import` reads any CSV or text file and suppresses every email in it, so Instantly and Smartlead exports work without mapping columns.
+- `leads estimate` shows the most the next run could cost against today's caps. With the default config (8 niches, 9 cities, 20 results) a full Maps pass is up to 1,440 places, about $4.32 at the estimated Outscraper price, under the $5 find cap.
+
 ## Not built
 - No sending. Lists only.
 - No LinkedIn or any logged in site.
-- No automatic sync of unsubscribes from Instantly or Smartlead. Use `leads suppress` or add a sync later.
+- No automatic sync of unsubscribes from Instantly or Smartlead. Export them and run `leads suppress-import`.
