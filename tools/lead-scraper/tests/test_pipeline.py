@@ -265,3 +265,25 @@ def test_export_filters_suppression_and_splits_by_niche(conn, cfg, tmp_path):
 
     s = stats(conn, cfg)
     assert (s.exportable, s.suppressed) == (2, 1)
+
+
+def test_find_strips_tracking_tags_from_websites(conn, cfg):
+    prov = FakeProvider([place("p9", "https://www.firm.com/office/phoenix?utm_source=yext&utm_medium=gmb#top")])
+    run_find(conn, cfg, prov)
+    assert conn.execute("SELECT website FROM businesses").fetchone()[0] == "https://www.firm.com/office/phoenix"
+
+
+def test_crawl_falls_back_to_http_when_https_fails(conn, cfg):
+    conn.execute("INSERT INTO businesses (name, niche, website, domain, source, scraped_at) VALUES "
+                 "('Old Site Law', 'family law attorney', 'https://oldsite.com', 'oldsite.com', 'fake', 'now')")
+
+    def handler(req):
+        if req.url.scheme == "https":
+            raise httpx.ConnectError("bad certificate")
+        if req.url.path == "/":
+            return httpx.Response(200, text='<a href="mailto:office@oldsite.com">x</a>', headers={"content-type": "text/html"})
+        return httpx.Response(404, headers={"content-type": "text/html"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=True)
+    r = run_emails(conn, cfg, crawler=SiteCrawler(cfg, client=client, sleep=no_sleep))
+    assert r.sites_failed == 0 and r.contacts_added == 1

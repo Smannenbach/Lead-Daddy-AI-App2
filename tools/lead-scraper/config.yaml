@@ -37,7 +37,7 @@ daily_caps_usd:
 # The provider prices are estimates. Check them against your plan (see DECISIONS.md).
 pricing:
   outscraper_per_place: 0.003
-  apify_per_place: 0.004
+  apify_per_place: 0.004     # Apify Google Maps Scraper, confirmed on a live run (Nov 2026)
   millionverifier_per_email: 0.0006
   # Anthropic prices per million tokens for the model below (prompts up to 100K tokens).
   claude_input_per_mtok: 0.10

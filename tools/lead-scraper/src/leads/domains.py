@@ -24,6 +24,12 @@ def normalize_url(url: str) -> str:
     return url
 
 
+def clean_website(url: str) -> str:
+    """Drop tracking tags and fragments: '...com/office?utm_source=yext#x' -> '...com/office'."""
+    url = normalize_url(url)
+    return url.split("#", 1)[0].split("?", 1)[0] if url else ""
+
+
 def site_domain(url: str) -> str:
     """'https://www.SmithLaw.com/contact?x=1' -> 'smithlaw.com'."""
     host = urlparse(normalize_url(url)).hostname or ""

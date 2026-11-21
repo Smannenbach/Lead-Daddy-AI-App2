@@ -96,6 +96,9 @@ class SiteCrawler:
             )
             try:
                 home = await self._get(client, website)
+                if home is None and website.startswith("https://"):
+                    # Some small sites have a broken certificate but still serve plain http.
+                    home = await self._get(client, "http://" + website[len("https://"):])
                 if home is None:
                     result.error = "homepage did not load"
                     return result

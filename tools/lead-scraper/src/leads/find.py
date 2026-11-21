@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from leads.config import Config
 from leads.costs import Run
 from leads.db import now
-from leads.domains import normalize_url, site_domain
+from leads.domains import clean_website, site_domain
 from leads.maps import MapsProvider, Place
 
 log = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def save_place(conn: sqlite3.Connection, place: Place, niche: str, source: str) 
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             place.name, niche, place.address, place.city, place.state, place.zip, place.phone,
-            normalize_url(place.website), domain, place.place_id, place.rating, place.review_count,
+            clean_website(place.website), domain, place.place_id, place.rating, place.review_count,
             source, now(),
         ),
     )

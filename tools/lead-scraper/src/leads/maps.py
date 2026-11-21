@@ -108,7 +108,8 @@ class Apify:
                 "locationQuery": f"{city}, {state}, USA",
                 "maxCrawledPlacesPerSearch": limit,
                 "language": "en",
-                "skipClosedPlaces": True,
+                # No skipClosedPlaces: Apify bills each filter per place (+25%). Closed
+                # places mostly drop out later anyway (dead site, no email).
             },
             headers={"Authorization": f"Bearer {secret('APIFY_API_TOKEN')}"},
         )

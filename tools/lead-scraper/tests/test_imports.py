@@ -59,9 +59,9 @@ def test_emails_in_any_export_format(tmp_path):
 
 
 def test_estimate_counts_pending_work(conn, cfg):
-    conn.execute("INSERT INTO searches VALUES ('outscraper', 'family law attorney', 'Phoenix', 'AZ', 20, 20, 0.06, 'now')")
+    conn.execute("INSERT INTO searches VALUES (?, 'family law attorney', 'Phoenix', 'AZ', 20, 20, 0.06, 'now')", (cfg.maps_provider,))
     cfg.raw["niches"] = ["family law attorney", "CPA"]
     est = {e.phase: e for e in estimate(conn, cfg)}
     assert est["find"].units == 20  # one search left, 20 places max
-    assert est["find"].max_usd == pytest.approx(20 * cfg.price("outscraper_per_place"))
+    assert est["find"].max_usd == pytest.approx(20 * cfg.price(f"{cfg.maps_provider}_per_place"))
     assert est["verify"].units == 0 and est["personalize"].max_usd == 0
