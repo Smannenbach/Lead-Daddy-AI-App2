@@ -1,0 +1,30 @@
+[project]
+name = "lead-scraper"
+version = "0.1.0"
+description = "Lead Daddy lead pipeline: find businesses, find and verify emails, personalize, export to Instantly or Smartlead."
+requires-python = ">=3.11"
+dependencies = [
+  "anthropic==2.12.0",
+  "httpx==0.28.1",
+  "python-dotenv==1.2.4",
+  "PyYAML==6.0.4",
+  "selectolax==1.0.2",
+  "typer==0.29.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.2.0"]
+
+[project.scripts]
+leads = "leads.cli:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
